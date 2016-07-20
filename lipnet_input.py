@@ -2,16 +2,19 @@ import pandas as pd
 import numpy as np
 import json
 import os
+import re
+from scipy import misc
+from tf_lipnet import tf_lipnet_train
 
 
 def repair_json(in_file, out_file):
-    '''
+    """
     Repairs original JSON files that describe particles. Put comma between JSON objects and enclose the list into square
     brackets
     :param in_file: full path to JSON file to be repaired
     :param out_file: full path file where repaired JSON is dumped
     :return: dumps repaired JSON to a file with specified name
-    '''
+    """
     with open(in_file, 'rb') as f:
         data = f.readlines()
 
@@ -25,7 +28,10 @@ def repair_json(in_file, out_file):
         try:
             start = data.index('{', start + 1)
             end = data.index('}', start)
-            json_rows.append(''.join(data[start:end+1]))
+            row = ''.join(data[start:end+1])
+            row = re.sub("\"Bmp\"", "\"Image\"", row)
+            row = re.sub(".bmp", ".jpg", row)
+            json_rows.append(row)
             start = end
         except ValueError:
             break
@@ -48,16 +54,26 @@ def repair_json(in_file, out_file):
         json.dump(repaired_json, f)
 
 
+def get_particles_df(path):
+    """
+    Read JSON that describes particles into a pandas data frame
+    :param path: full path to JSON file
+    :return: data frame
+    """
+    df = pd.read_json(path)
+    # replace integers with class names for better readability
+    df['Class'] = df['Class'].replace(to_replace=[3, 4, 5, 7, 8, 10],
+                                      value=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty', 'Full', 'Uncertain'])
+    # present class captions as one hot encoding
+    df = pd.get_dummies(df, prefix='Label', columns=['Class'])
+    return df
+
+
 def main():
-    path_to_lamellarity = '/home/sergii/Documents/microscopic_data/packiging/particles.json'
-    path_to_lamellarity_repaired = '/home/sergii/Documents/microscopic_data/packiging/particles_repaired.json'
-
-    #repair_json(path_to_lamellarity, path_to_lamellarity_repaired)
-    with open(path_to_lamellarity_repaired, 'rb') as f:
-        p = json.load(f)
-    print len(p)
-    print p[20001]['Id']
-
+    dir = '/home/sergii/Documents/microscopic_data/packiging/'
+    path_to_json = dir + 'particles_repaired_2.json'
+    path_to_img = dir + 'images/particles/'
+    #repair_json(dir + 'particles.json', dir + 'particles_repaired_2.json')
 
 
 if __name__ == '__main__':
