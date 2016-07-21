@@ -8,7 +8,20 @@ def read_image_from_disk(input_queue, path):
     label = input_queue[1]
     file_contents = tf.read_file(path + input_queue[0])
     example = tf.image.decode_jpeg(file_contents, channels=1)
-    example = tf.image.resize_images(example, 32, 32)
+    dim = tf.shape(example)
+    height = dim[0]
+    width = dim[1]
+    padding = tf.constant(50, name='padding', dtype=tf.int32)
+    padding2 = tf.constant(100, dtype=tf.int32)
+    target_height = tf.sub(height, padding2)
+    target_width = tf.sub(width, padding2)
+    # remove padding
+    # https://github.com/tensorflow/tensorflow/issues/521
+    #example = tf.image.crop_to_bounding_box(example, padding, padding, target_height, target_width)
+    # resize image
+    w = h = 32
+    example = tf.image.resize_images(example, w, h)
+
     return example, label
 
 
@@ -41,14 +54,22 @@ def inputs(particles_df, path_to_image, batch_size):
     labels = tf.convert_to_tensor(label_list,
                                   dtype=tf.int32)
 
-    # make an input queue
+    # make an input queue that produces the filenames to read and corresponding labels
     input_queue = tf.train.slice_input_producer([images, labels],
                                                 #num_epochs=num_epochs,
                                                 shuffle=True)
 
+    # read images from disk and corresponding labels in the input queue
     image, label = read_image_from_disk(input_queue, path_to_image)
+
+    # Subtract off the mean and divide by the variance of the pixels.
+    image = tf.image.per_image_whitening(image)
 
     image_batch, label_batch = tf.train.batch([image, label],
                                               batch_size=batch_size,
-                                              dynamic_pad=True)
+                                              #dynamic_pad=True
+                                              )
+    # display training images in the Tensorboard
+    tf.image_summary('images', image_batch, max_images=20)
+
     return image_batch, label_batch
