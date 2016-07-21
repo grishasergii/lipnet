@@ -19,7 +19,7 @@ def read_image_from_disk(input_queue, path):
     # https://github.com/tensorflow/tensorflow/issues/521
     #example = tf.image.crop_to_bounding_box(example, padding, padding, target_height, target_width)
     # resize image
-    w = h = 32
+    w = h = 96
     example = tf.image.resize_images(example, w, h)
 
     return example, label
