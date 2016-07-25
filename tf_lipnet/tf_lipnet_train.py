@@ -2,6 +2,8 @@ import tensorflow as tf
 import tf_lipnet_input
 import tf_lipnet
 from datetime import datetime
+import contextlib
+import numpy as np
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -10,10 +12,17 @@ tf.app.flags.DEFINE_string('train_dir', './tmp/lipnet_train', """Directory where
 tf.app.flags.DEFINE_integer('max_steps', 1000000, """Maximum number of training epochs""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False, """Whether to log device placement""")
 
+@contextlib.contextmanager
+def printoptions(*args, **kwargs):
+    original = np.get_printoptions()
+    np.set_printoptions(*args, **kwargs)
+    yield
+    np.set_printoptions(original)
+
 
 def _empty_train_dir():
     """
-    Empty train directory
+    Delete everything from train directory
     :return: nothing
     """
     if tf.gfile.Exists(FLAGS.train_dir):
@@ -33,7 +42,7 @@ def train(particles_df, path_to_images, max_steps):
         global_step = tf.Variable(0, trainable=False)
 
         # batch size. pass it as parameter later
-        batch_size = 100
+        batch_size = 500
 
         # get images and labels, training set
         images, labels = tf_lipnet_input.inputs(particles_df,
@@ -43,10 +52,11 @@ def train(particles_df, path_to_images, max_steps):
         labels = tf.cast(labels, tf.float32)
         # Build a graph that computes the logits predictions.
         # predictions - predicted probabilities of belonging to any of classes
-        predictions = tf_lipnet.get_predictions(images, batch_size=batch_size)
+        logits, predictions = tf_lipnet.get_predictions(images, batch_size=batch_size)
 
         # calculate loss
-        loss = tf_lipnet.get_loss(predictions, labels)
+        loss = tf_lipnet.get_loss(logits, labels)
+        accuracy = tf_lipnet.get_accuracy(predictions, labels)
 
         tf.scalar_summary('Loss', loss)
 
@@ -69,11 +79,13 @@ def train(particles_df, path_to_images, max_steps):
 
         # Create a summary writer
         summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
-
-        for step in range(1, max_steps, 1):
-            _, loss_value = sess.run([train_op, loss])
+        max_steps = 201
+        for step in range(max_steps):
+            _, loss_value, acc = sess.run([train_op, loss, accuracy])
             if step % 10 == 0:
                 summary_str = sess.run(summary_op)
                 summary_writer.add_summary(summary_str, step)
-                format_str = '%s: step %d, loss = %.2f'
-                print format_str % (datetime.now(), step, loss_value)
+                format_str = '%s: step %d, loss = %.4f, accuracy = %.4f'
+                print format_str % (datetime.now(), step, loss_value, acc)
+                #with printoptions(precision=4, suppress=True):
+                #    print p

@@ -5,32 +5,29 @@ import os.path
 
 
 def read_image_from_disk(input_queue, path):
+    """
+    Read individual image from disk
+    :param input_queue:
+    :param path: path to the folder with images
+    :return: tensor corresponding to the image, tensor corresponding to labels
+    """
     label = input_queue[1]
     file_contents = tf.read_file(path + input_queue[0])
     example = tf.image.decode_jpeg(file_contents, channels=1)
-    dim = tf.shape(example)
-    height = dim[0]
-    width = dim[1]
-    padding = tf.constant(50, name='padding', dtype=tf.int32)
-    padding2 = tf.constant(100, dtype=tf.int32)
-    target_height = tf.sub(height, padding2)
-    target_width = tf.sub(width, padding2)
-    # remove padding
-    # https://github.com/tensorflow/tensorflow/issues/521
-    #example = tf.image.crop_to_bounding_box(example, padding, padding, target_height, target_width)
     # resize image
-    w = h = 96
+    w = h = 28
     example = tf.image.resize_images(example, w, h)
 
     return example, label
 
 
-def inputs(particles_df, path_to_image, batch_size):
+def inputs(particles_df, path_to_image, batch_size, shuffle_batch=True):
     """
     Construct inputs for lipnet
     :param particles_df: pandas data frame describing particles
     :param data_dir: Path to the Lipnet images directory
     :param batch_size: Number of images per batch
+    :param shuffle_batch: boolean, shuffle examples in batch or not
     :return:
         images: 3D tensor of [batch_size, width, height]. All images have different size
         labels: 1D tensor of [batch_size] with labels
@@ -65,10 +62,17 @@ def inputs(particles_df, path_to_image, batch_size):
     # Subtract off the mean and divide by the variance of the pixels.
     image = tf.image.per_image_whitening(image)
 
-    image_batch, label_batch = tf.train.batch([image, label],
-                                              batch_size=batch_size,
-                                              #dynamic_pad=True
-                                              )
+    # group examples into batches randomly or not
+    if shuffle_batch:
+        image_batch, label_batch = tf.train.shuffle_batch([image, label],
+                                                          batch_size=batch_size,
+                                                          capacity=2000,
+                                                          min_after_dequeue=1000)
+    else:
+        image_batch, label_batch = tf.train.batch([image, label],
+                                                  batch_size=batch_size
+                                                    )
+
     # display training images in the Tensorboard
     tf.image_summary('images', image_batch, max_images=20)
 
