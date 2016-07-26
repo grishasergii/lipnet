@@ -4,13 +4,16 @@ import tf_lipnet
 from datetime import datetime
 import contextlib
 import numpy as np
+import os.path
 
 FLAGS = tf.app.flags.FLAGS
 
 # Directory for train information output. It will be emptied at the beginning of every run
-tf.app.flags.DEFINE_string('train_dir', './tmp/lipnet_train', """Directory where to write event logs and checkpoints.""")
+tf.app.flags.DEFINE_string('log_dir', './output/log', """Directory where to write event logs.""")
+tf.app.flags.DEFINE_string('checkpoint_dir', './output/checkpoint', """Directory where to write checkpoint""")
 tf.app.flags.DEFINE_integer('max_steps', 1000000, """Maximum number of training epochs""")
 tf.app.flags.DEFINE_boolean('log_device_placement', False, """Whether to log device placement""")
+
 
 @contextlib.contextmanager
 def printoptions(*args, **kwargs):
@@ -20,14 +23,15 @@ def printoptions(*args, **kwargs):
     np.set_printoptions(original)
 
 
-def _empty_train_dir():
+def _prepare_dir(directory):
     """
-    Delete everything from train directory
+    Prepares a directory. If it exists everything is deleted, otherwise the directory is created
+    :param directory: string, path to directory to be emptied and/or created
     :return: nothing
     """
-    if tf.gfile.Exists(FLAGS.train_dir):
-        tf.gfile.DeleteRecursively(FLAGS.train_dir)
-    tf.gfile.MakeDirs(FLAGS.train_dir)
+    if tf.gfile.Exists(directory):
+        tf.gfile.DeleteRecursively(directory)
+    tf.gfile.MakeDirs(directory)
 
 
 def train(particles_df, path_to_images, max_steps):
@@ -37,7 +41,10 @@ def train(particles_df, path_to_images, max_steps):
     :param path_to_images: path to folder with images
     :return:
     """
-    _empty_train_dir()
+    # Prepare output directories. Empty them if exist, otherwise create
+    _prepare_dir(FLAGS.log_dir)
+    _prepare_dir(FLAGS.checkpoint_dir)
+
     with tf.Graph().as_default():
         global_step = tf.Variable(0, trainable=False)
 
@@ -64,6 +71,9 @@ def train(particles_df, path_to_images, max_steps):
         # and updates the model parameters
         train_op = tf_lipnet.train(loss, global_step, batch_size)
 
+        # Create a saver
+        saver = tf.train.Saver(tf.all_variables())
+
         # Build the summary operation based on th TF collection of summaries
         summary_op = tf.merge_all_summaries()
 
@@ -78,7 +88,7 @@ def train(particles_df, path_to_images, max_steps):
         tf.train.start_queue_runners(sess=sess)
 
         # Create a summary writer
-        summary_writer = tf.train.SummaryWriter(FLAGS.train_dir, sess.graph)
+        summary_writer = tf.train.SummaryWriter(FLAGS.log_dir, sess.graph)
         max_steps = 201
         for step in range(max_steps):
             _, loss_value, acc = sess.run([train_op, loss, accuracy])
@@ -89,3 +99,9 @@ def train(particles_df, path_to_images, max_steps):
                 print format_str % (datetime.now(), step, loss_value, acc)
                 #with printoptions(precision=4, suppress=True):
                 #    print p
+                # save model to checkpoint
+                if step % 100 == 0:
+                    checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+                    saver.save(sess, checkpoint_path, global_step=step)
+        checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+        saver.save(sess, checkpoint_path, global_step=step)
