@@ -21,7 +21,7 @@ def read_image_from_disk(input_queue, path):
     return example, label
 
 
-def inputs(dataset, path_to_image, batch_size, shuffle_batch=True):
+def inputs(dataset, path_to_image, batch_size, shuffle_batch=True, num_epochs=None):
     """
     Construct inputs for lipnet
     :param dataset: object that implements DatasetAbstract contract
@@ -52,7 +52,7 @@ def inputs(dataset, path_to_image, batch_size, shuffle_batch=True):
 
     # make an input queue that produces the filenames to read and corresponding labels
     input_queue = tf.train.slice_input_producer([images, labels],
-                                                #num_epochs=num_epochs,
+                                                num_epochs=num_epochs,
                                                 shuffle=True)
 
     # read images from disk and corresponding labels in the input queue
@@ -65,12 +65,14 @@ def inputs(dataset, path_to_image, batch_size, shuffle_batch=True):
     if shuffle_batch:
         image_batch, label_batch = tf.train.shuffle_batch([image, label],
                                                           batch_size=batch_size,
-                                                          capacity=2000,
-                                                          min_after_dequeue=1000)
+                                                          capacity=5000,
+                                                          min_after_dequeue=1000
+                                                          )
     else:
         image_batch, label_batch = tf.train.batch([image, label],
-                                                  batch_size=batch_size
-                                                    )
+                                                  batch_size=batch_size,
+                                                  capacity=5000
+                                                  )
 
     # display training images in the Tensorboard
     tf.image_summary('images', image_batch, max_images=20)

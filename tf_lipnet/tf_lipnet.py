@@ -146,6 +146,19 @@ def get_accuracy(predictions, labels):
     return accuracy
 
 
+def get_batch_size(images, labels):
+    """
+    Returns number of examples in a batch
+    :param images: tensor
+    :param labels: tensor
+    :return: scalar
+    """
+    num_images = tf.shape(images)[0]
+    num_labels = tf.shape(labels)[0]
+    #assert num_images == num_labels, 'Number of images and corresponding labels must be the same'
+    return num_images
+
+
 def train(total_loss, global_step, batch_size):
     """
 

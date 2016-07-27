@@ -35,7 +35,7 @@ class DatasetAbstract(object):
         pass
 
     @abstractmethod
-    def get_examples_count(self):
+    def get_count(self):
         """
 
         :return: integer, total number of examples in the dataset
@@ -60,7 +60,7 @@ class DatasetPD(DatasetAbstract):
         self.__shape = self.__df.shape
         self.__class_columns = [col for col in list(self.__df) if col.startswith('Label')]
 
-    def get_examples_count(self):
+    def get_count(self):
         """
         See description in DatasetAbstract
         :return:
