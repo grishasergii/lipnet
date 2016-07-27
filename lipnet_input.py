@@ -2,6 +2,7 @@ from __future__ import division
 import pandas as pd
 import json
 import os
+import os.path
 import re
 import math
 
@@ -68,17 +69,20 @@ def get_particles_df(path):
     return df
 
 
-def make_train_validation_test_sets(path_to_json, out_dir,
+def make_train_validation_test_sets(path_to_json, out_dir, path_to_images,
                                     train_fraction=0.6,
                                     validation_fraction=0.2,
-                                    test_fraction=0.2):
+                                    test_fraction=0.2,
+                                    do_print=False):
     """
     Splits entire dataset into train, test and validation sets
     :param path_to_json: string, full path to initial dataset
     :param out_dir: string, path to the output durectory where sets are saved
+    :param path_to_images: string,, path to images
     :param train_fraction:
     :param validation_fraction:
     :param test_fraction:
+    :param do_print: boolean, print messages to console or not
     :return: nothing
     """
     assert train_fraction + validation_fraction + test_fraction == 1, 'Sum of subsets fractions must be 1'
@@ -91,13 +95,20 @@ def make_train_validation_test_sets(path_to_json, out_dir,
     # present class captions as one hot encoding
     df = pd.concat([df, pd.get_dummies(df['Class'], prefix='Label')], axis=1)
 
+    # Check that all images in dataframe have corresponding file on the disk
+    for index, row in df.iterrows():
+        if not os.path.isfile(path_to_images + row['Image']):
+            print '{} image was not found. This example will be deleted'.format(row['Image'])
+            df.drop(index, inplace=True)
+
     # prepare new dataframes
     df_train = pd.DataFrame()
     df_validation = pd.DataFrame()
     df_test = pd.DataFrame()
 
-        # get class counts
-    print '----------\nEntire set:\n', df['Class'].value_counts()
+    if do_print:
+        print '----------\nEntire set:\n', df['Class'].value_counts()
+
     class_counts = df['Class'].value_counts().to_dict()
     for label, count in class_counts.iteritems():
         df_test = pd.concat([df_test, df[df['Class'] == label].sample(frac=test_fraction)])
@@ -110,9 +121,10 @@ def make_train_validation_test_sets(path_to_json, out_dir,
         df_train = pd.concat([df_train, df[df['Class'] == label]])
         df = df[~df.index.isin(df_train.index)]
 
-    print '----------\nTrain set:\n', df_train['Class'].value_counts()
-    print '----------\nValidation set:\n', df_validation['Class'].value_counts()
-    print '----------\nTest set:\n', df_test['Class'].value_counts()
+    if do_print:
+        print '----------\nTrain set:\n', df_train['Class'].value_counts()
+        print '----------\nValidation set:\n', df_validation['Class'].value_counts()
+        print '----------\nTest set:\n', df_test['Class'].value_counts()
 
     # remove out_file if it exists
     filenames = ['train_set.json', 'test_set.json', 'validation_set']
@@ -124,23 +136,23 @@ def make_train_validation_test_sets(path_to_json, out_dir,
         except IOError:
             pass
 
-    with open(out_dir + 'train_set.json', 'w+') as f:
-        json.dump(df_train.to_json(), f)
-    with open(out_dir + 'test_set.json', 'w+') as f:
-        json.dump(df_test.to_json(), f)
-    with open(out_dir + 'validation_set.json', 'w+') as f:
-        json.dump(df_validation.to_json(), f)
+    df_train.to_json(out_dir + 'train_set.json')
+    df_validation.to_json(out_dir + 'validation_set.json')
+    df_test.to_json(out_dir + 'test_set.json')
 
 
 def main():
     problems = ['packiging', 'lamellarity']
     dir = '/home/sergii/Documents/microscopic_data/{}/'
-    path_to_json = dir + 'particles_repaired_2.json'
+    path_to_json = dir + 'particles_repaired.json'
+    path_to_images = dir + 'images/particles/'
     out_path = dir + '{}_'
 
     for p in problems:
         make_train_validation_test_sets(path_to_json.format(p),
-                                        out_path.format(p, p))
+                                        out_path.format(p, p),
+                                        path_to_images.format(p),
+                                        do_print=True)
 
     #repair_json(dir + 'particles.json', dir + 'particles_repaired_2.json')
 

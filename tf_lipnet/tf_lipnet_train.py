@@ -26,10 +26,10 @@ def _prepare_dir(directory):
     tf.gfile.MakeDirs(directory)
 
 
-def train(particles_df, path_to_images, max_steps):
+def train(train_set, path_to_images, max_steps):
     """
     Train lipnet CNN with Tensorflow
-    :param particles_df: pandas data frame that describes all particles
+    :param train_set: object that implements DatasetAbstract contract
     :param path_to_images: path to folder with images
     :return:
     """
@@ -41,7 +41,7 @@ def train(particles_df, path_to_images, max_steps):
         global_step = tf.Variable(0, trainable=False)
 
         # get images and labels, training set
-        images, labels = tf_lipnet_input.inputs(particles_df,
+        images, labels = tf_lipnet_input.inputs(train_set,
                                                 path_to_images,
                                                 batch_size=FLAGS.batch_size)
         images = tf.cast(images, tf.float32)

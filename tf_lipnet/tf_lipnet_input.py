@@ -21,10 +21,10 @@ def read_image_from_disk(input_queue, path):
     return example, label
 
 
-def inputs(particles_df, path_to_image, batch_size, shuffle_batch=True):
+def inputs(dataset, path_to_image, batch_size, shuffle_batch=True):
     """
     Construct inputs for lipnet
-    :param particles_df: pandas data frame describing particles
+    :param dataset: object that implements DatasetAbstract contract
     :param data_dir: Path to the Lipnet images directory
     :param batch_size: Number of images per batch
     :param shuffle_batch: boolean, shuffle examples in batch or not
@@ -38,13 +38,12 @@ def inputs(particles_df, path_to_image, batch_size, shuffle_batch=True):
     # http://stackoverflow.com/questions/34340489/tensorflow-read-images-with-labels
 
     # Create list of images and corresponding labels
-    image_list = particles_df['Image'].values
+    image_list = dataset.get_image_names()
     for f in image_list:
         if not tf.gfile.Exists(path_to_image + f):
             raise ValueError('Failed to find file: ' + f)
 
-    label_columns = [col for col in list(particles_df) if col.startswith('Label')]
-    label_list = particles_df[label_columns].values
+    label_list = dataset.get_labels()
 
     images = tf.convert_to_tensor(image_list,
                                   dtype=tf.string)

@@ -46,7 +46,7 @@ class DatasetPD(DatasetAbstract):
     """
     This is an implementation of lipnet dataset based on pandas dataframe and JSON
     """
-    __df = None
+    __df = pd.DataFrame()
     __shape = None
     __class_columns = None
 
@@ -87,3 +87,11 @@ class DatasetPD(DatasetAbstract):
         :return:
         """
         return self.__df[self.__class_columns].values
+
+    def print_stats(self):
+        """
+        Prints som dataframe statistics to console
+        :return: nothing
+        """
+        print '{} columns and {} rows'.format(self.__shape[1], self.__shape[0])
+        print self.__df['Class'].value_counts()

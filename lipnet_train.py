@@ -1,4 +1,4 @@
-import lipnet_input
+from lipnet_dataset import DatasetPD
 from tf_lipnet import tf_lipnet_train
 
 def train():
@@ -6,11 +6,18 @@ def train():
     Train lipnet CNN with some framework. Currently only Tensorflow is supported
     :return:
     """
-    dir = '/home/sergii/Documents/microscopic_data/packiging/'
-    path_to_json = dir + 'particles_repaired_2.json'
-    path_to_img = dir + 'images/particles/'
-    df = lipnet_input.get_particles_df(path_to_json)
-    tf_lipnet_train.train(df, path_to_img, 100000)
+    problem = 'packiging'
+    dir = '/home/sergii/Documents/microscopic_data/{}/'
+    path_to_json = dir + '{}_train_set.json'
+    path_to_img = dir + 'images/without_padding/'
+
+    # create train set
+    train_set = DatasetPD(path_to_json.format(problem, problem))
+    #train_set.print_stats()
+    # start training
+    tf_lipnet_train.train(train_set,
+                          path_to_img.format(problem),
+                          10000)
 
 
 def main(argv=None):
