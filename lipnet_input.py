@@ -1,10 +1,9 @@
+from __future__ import division
 import pandas as pd
-import numpy as np
 import json
 import os
 import re
-from scipy import misc
-from tf_lipnet import tf_lipnet_train
+import math
 
 
 def repair_json(in_file, out_file):
@@ -65,14 +64,84 @@ def get_particles_df(path):
     df['Class'] = df['Class'].replace(to_replace=[3, 4, 5, 7, 8, 10],
                                       value=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty', 'Full', 'Uncertain'])
     # present class captions as one hot encoding
-    df = pd.get_dummies(df, prefix='Label', columns=['Class'])
+    df = pd.concat([df, pd.get_dummies(df['Class'], prefix='Label')], axis=1)
     return df
 
 
+def make_train_validation_test_sets(path_to_json, out_dir,
+                                    train_fraction=0.6,
+                                    validation_fraction=0.2,
+                                    test_fraction=0.2):
+    """
+    Splits entire dataset into train, test and validation sets
+    :param path_to_json: string, full path to initial dataset
+    :param out_dir: string, path to the output durectory where sets are saved
+    :param train_fraction:
+    :param validation_fraction:
+    :param test_fraction:
+    :return: nothing
+    """
+    assert train_fraction + validation_fraction + test_fraction == 1, 'Sum of subsets fractions must be 1'
+    df = pd.read_json(path_to_json)
+    # one-hot encode labels
+    df['Class'] = df['Class'].replace(to_replace=[3, 4, 5, 7, 8, 10],
+                                      value=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty', 'Full', 'Uncertain'])
+
+
+    # present class captions as one hot encoding
+    df = pd.concat([df, pd.get_dummies(df['Class'], prefix='Label')], axis=1)
+
+    # prepare new dataframes
+    df_train = pd.DataFrame()
+    df_validation = pd.DataFrame()
+    df_test = pd.DataFrame()
+
+        # get class counts
+    print '----------\nEntire set:\n', df['Class'].value_counts()
+    class_counts = df['Class'].value_counts().to_dict()
+    for label, count in class_counts.iteritems():
+        df_test = pd.concat([df_test, df[df['Class'] == label].sample(frac=test_fraction)])
+        df = df[~df.index.isin(df_test.index)]
+
+        validation_fraction_adjusted = validation_fraction / (1 - test_fraction)
+        df_validation = pd.concat([df_validation, df[df['Class'] == label].sample(frac=validation_fraction_adjusted)])
+        df = df[~df.index.isin(df_validation.index)]
+
+        df_train = pd.concat([df_train, df[df['Class'] == label]])
+        df = df[~df.index.isin(df_train.index)]
+
+    print '----------\nTrain set:\n', df_train['Class'].value_counts()
+    print '----------\nValidation set:\n', df_validation['Class'].value_counts()
+    print '----------\nTest set:\n', df_test['Class'].value_counts()
+
+    # remove out_file if it exists
+    filenames = ['train_set.json', 'test_set.json', 'validation_set']
+    for f in filenames:
+        try:
+            os.remove(out_dir + f)
+        except OSError:
+            pass
+        except IOError:
+            pass
+
+    with open(out_dir + 'train_set.json', 'w+') as f:
+        json.dump(df_train.to_json(), f)
+    with open(out_dir + 'test_set.json', 'w+') as f:
+        json.dump(df_test.to_json(), f)
+    with open(out_dir + 'validation_set.json', 'w+') as f:
+        json.dump(df_validation.to_json(), f)
+
+
 def main():
-    dir = '/home/sergii/Documents/microscopic_data/packiging/'
+    problems = ['packiging', 'lamellarity']
+    dir = '/home/sergii/Documents/microscopic_data/{}/'
     path_to_json = dir + 'particles_repaired_2.json'
-    path_to_img = dir + 'images/particles/'
+    out_path = dir + '{}_'
+
+    for p in problems:
+        make_train_validation_test_sets(path_to_json.format(p),
+                                        out_path.format(p, p))
+
     #repair_json(dir + 'particles.json', dir + 'particles_repaired_2.json')
 
 
