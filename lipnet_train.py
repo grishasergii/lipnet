@@ -1,6 +1,6 @@
 from lipnet_dataset import DatasetPD
-from tf_lipnet import tf_lipnet_train
-from tf_lipnet import FLAGS
+from lipnet_tf import train as lptf
+from lipnet_tf import FLAGS
 
 def train():
     """
@@ -26,10 +26,10 @@ def train():
                                num_epochs=1)
     #train_set.print_stats()
     # start training
-    tf_lipnet_train.train(train_set,
-                          None,
-                          path_to_img.format(problem),
-                          10000)
+    lptf.train(train_set,
+                None,
+                path_to_img.format(problem),
+                10000)
 
 
 def main(argv=None):

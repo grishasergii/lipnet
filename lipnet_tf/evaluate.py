@@ -1,7 +1,7 @@
 from __future__ import division
 import tensorflow as tf
 from . import FLAGS
-import tf_lipnet
+import model
 import math
 from datetime import datetime
 
@@ -96,11 +96,11 @@ def evaluate(dataset, path_to_images):
         labels = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
-        logits, predictions = tf_lipnet.get_predictions(images, batch_size)
+        logits, predictions = model.get_predictions(images, batch_size)
 
-        loss = tf_lipnet.get_loss(logits, labels)
-        accuracy = tf_lipnet.get_accuracy(predictions, labels)
-        batch_size_op = tf_lipnet.get_batch_size(images, labels)
+        loss = model.get_loss(logits, labels)
+        accuracy = model.get_accuracy(predictions, labels)
+        batch_size_op = model.get_batch_size(images, labels)
 
         saver = tf.train.Saver()
 

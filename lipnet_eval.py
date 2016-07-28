@@ -1,6 +1,6 @@
 from lipnet_dataset import DatasetPD
-from tf_lipnet import tf_lipnet_eval
-from tf_lipnet import FLAGS
+from lipnet_tf import evaluate as lptf
+from lipnet_tf import FLAGS
 
 def evaluate():
     """
@@ -27,9 +27,9 @@ def evaluate():
     FLAGS.batch_size = dataset.get_count()
     # start evaluation
     for _ in range(1):
-        tf_lipnet_eval.evaluate(dataset,
-                                path_to_img.format(problem)
-                                )
+        lptf.evaluate(dataset,
+                          path_to_img.format(problem)
+                          )
 
 def main(argv=None):
     evaluate()

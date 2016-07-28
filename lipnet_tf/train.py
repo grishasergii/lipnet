@@ -1,6 +1,6 @@
 from __future__ import division
 import tensorflow as tf
-import tf_lipnet
+import model
 from datetime import datetime
 import contextlib
 import numpy as np
@@ -53,17 +53,17 @@ def train(train_set, validation_set, path_to_images, max_steps):
 
         # Build a graph that computes the logits predictions.
         # predictions - predicted probabilities of belonging to any of classes
-        logits, predictions = tf_lipnet.get_predictions(images, batch_size)
+        logits, predictions = model.get_predictions(images, batch_size)
 
         # calculate loss
-        loss = tf_lipnet.get_loss(logits, labels)
-        accuracy = tf_lipnet.get_accuracy(predictions, labels)
+        loss = model.get_loss(logits, labels)
+        accuracy = model.get_accuracy(predictions, labels)
 
         tf.scalar_summary('Loss', loss)
 
         # Build a Graph that trains the model with one batch of examples
         # and updates the model parameters
-        train_op = tf_lipnet.train(loss, global_step, FLAGS.batch_size)
+        train_op = model.train(loss, global_step, FLAGS.batch_size)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables())
