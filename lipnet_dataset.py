@@ -1,3 +1,4 @@
+from __future__ import division
 from abc import ABCMeta, abstractmethod
 import pandas as pd
 from random import shuffle
@@ -5,6 +6,8 @@ import os
 from skimage import io, img_as_float
 from skimage.transform import resize
 import numpy as np
+import sys
+import math
 
 
 class Batch:
@@ -25,6 +28,7 @@ class Batch:
     def size(self):
         return self.ids.shape[0]
 
+
 class DatasetAbstract(object):
     """
     This is an abstract class that describes a dataset object.
@@ -32,6 +36,14 @@ class DatasetAbstract(object):
     and implement all stated below methods.
     """
     __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def next_batch(self):
+        """
+        Yields a batch of data
+        :return: batch
+        """
+        pass
 
     @abstractmethod
     def get_num_classes(self):
@@ -42,27 +54,12 @@ class DatasetAbstract(object):
         pass
 
     @abstractmethod
-    def get_image_names(self):
-        """
-
-        :return: numpy 1D array of strings, corresponding to image names
-        """
-        pass
-
-    @abstractmethod
-    def get_labels(self):
-        """
-
-        :return: numpy 2D array, one-hot encoded labels
-        """
-        pass
-
-    @abstractmethod
     def get_count(self):
         """
 
         :return: integer, total number of examples in the dataset
         """
+        pass
 
 
 class DatasetPD(DatasetAbstract):
@@ -98,6 +95,12 @@ class DatasetPD(DatasetAbstract):
         self.__path_to_img = path_to_img
         self.__batch_size = batch_size
         self.__create_chunks()
+
+    @property
+    def num_steps(self):
+        if self.__num_epochs is None:
+            return sys.maxint
+        return self.__num_epochs * math.ceil(self.get_count() / self.__batch_size)
 
     def chunks(self, items, chunk_size):
         """
@@ -197,18 +200,3 @@ class DatasetPD(DatasetAbstract):
         :return:
         """
         return len(self.__class_columns)
-
-    def get_image_names(self):
-        """
-        See description in DatasetAbstract
-        :return:
-        """
-        return self.__df['Image'].values
-
-    def get_labels(self):
-        """
-        See description in DatasetAbstract
-        :return:
-        """
-        return self.__df[self.__class_columns].values
-

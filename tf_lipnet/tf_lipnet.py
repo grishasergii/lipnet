@@ -78,12 +78,12 @@ def get_predictions(images, batch_size):
     #
     # First convolutional layer conv1
     NUM_CLASSES = 3
-    kernel_outputs = 32
+    kernel_outputs = 64
     with tf.variable_scope('conv1') as scope:
         # 5x5 convolution 1 input 64 outputs
         kernel = tf.Variable(tf.random_normal([3, 3, 1, kernel_outputs], stddev=5e-2))
         conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = _variable_on_cpu('biases', [32], tf.constant_initializer(0.0))
+        biases = _variable_on_cpu('biases', [kernel_outputs], tf.constant_initializer(0.0))
         bias = tf.nn.bias_add(conv, biases)
         conv1 = tf.nn.relu(bias, name=scope.name)
         _activation_summary(conv1)

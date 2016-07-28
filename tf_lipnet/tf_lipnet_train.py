@@ -1,6 +1,5 @@
 from __future__ import division
 import tensorflow as tf
-import tf_lipnet_input
 import tf_lipnet
 from datetime import datetime
 import contextlib
@@ -35,8 +34,9 @@ def train(train_set, validation_set, path_to_images, max_steps):
     :return:
     """
 
-    assert train_set.get_num_classes() == validation_set.get_num_classes(),\
-        "Number of classes in train and validation sets must be the same"
+    if validation_set is not None:
+        assert train_set.get_num_classes() == validation_set.get_num_classes(),\
+            "Number of classes in train and validation sets must be the same"
 
     # Prepare output directories. Empty them if exist, otherwise create
     _prepare_dir(FLAGS.log_train_dir)
@@ -46,15 +46,8 @@ def train(train_set, validation_set, path_to_images, max_steps):
         global_step = tf.Variable(0, trainable=False)
 
         # get images and labels, training set
-        """
-        images, labels = tf_lipnet_input.inputs(train_set,
-                                                path_to_images,
-                                                batch_size=FLAGS.batch_size)
-        images = tf.cast(images, tf.float32)
-        labels = tf.cast(labels, tf.float32)
-        """
 
-        images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images')
+        images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images_input')
         labels = tf.placeholder(tf.float32, [None, train_set.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
@@ -91,21 +84,27 @@ def train(train_set, validation_set, path_to_images, max_steps):
         # Create a summary writer
         summary_writer = tf.train.SummaryWriter(FLAGS.log_train_dir, sess.graph)
         max_steps = 201
-        format_str = '%s: %s step %d, loss = %.4f, accuracy = %.4f'
+        format_str = '%s: step %d of %d: %s, loss = %.4f, accuracy = %.4f'
         batch = train_set.next_batch()
+        total_steps = train_set.num_steps
         step = 0
         while batch is not None:
+            step += 1
             # perform training
             _, loss_value, acc = sess.run([train_op, loss, accuracy], feed_dict={images: batch.images,
                                                                                  labels: batch.labels,
                                                                                  batch_size: batch.size})
-            print format_str % (datetime.now(), 'training', step, loss_value, acc)
-            #summary_str = sess.run(summary_op)
-            #summary_writer.add_summary(summary_str, step)
+            print format_str % (datetime.now(), step, total_steps, 'training', loss_value, acc)
+
+            summary_str = sess.run(summary_op, feed_dict={images: batch.images,
+                                                          labels: batch.labels,
+                                                          batch_size: batch.size})
+            summary_writer.add_summary(summary_str, step)
             batch = train_set.next_batch()
 
-            if step % 10 == 0:
+            if validation_set is not None and step % 10 == 0:
                 # perform evaluation on validation set
+                print '%s: ...validating' % (datetime.now())
                 validation_set.reset()
                 batch_validation = validation_set.next_batch()
                 loss_value = acc = 0
@@ -120,12 +119,11 @@ def train(train_set, validation_set, path_to_images, max_steps):
                     batch_validation = validation_set.next_batch()
                 loss_value /= validation_set.get_count()
                 acc /= validation_set.get_count()
-                print format_str % (datetime.now(), 'validation', step, loss_value, acc)
+                print format_str % (datetime.now(), step, total_steps, 'validation', loss_value, acc)
 
             if step % 100 == 0:
                 checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
-            step += 1
 
         checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)

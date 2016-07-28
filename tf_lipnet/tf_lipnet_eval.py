@@ -1,7 +1,6 @@
 from __future__ import division
 import tensorflow as tf
 from . import FLAGS
-import tf_lipnet_input
 import tf_lipnet
 import math
 from datetime import datetime
@@ -63,13 +62,15 @@ def evaluate_once(dataset, saver, summary_writer, loss_op, accuracy_op, summary_
             accuracy /= total_sample_count
 
             print "%s: accuracy = %.4f loss = %.4f examples = %d" % (datetime.now(), accuracy, loss, total_sample_count)
-            """
+
             summary = tf.Summary()
-            summary.ParseFromString(sess.run(summary_op))
+            summary.ParseFromString(sess.run(summary_op, feed_dict={images_ph: [],
+                                                                    labels_ph: [],
+                                                                    batch_size_ph: 0}))
             summary.value.add(tag='Accuracy', simple_value=accuracy)
             summary.value.add(tag='Loss', simple_value=loss)
             summary_writer.add_summary(summary, global_step)
-            """
+
         except Exception as e:
             coord.request_stop(e)
 
