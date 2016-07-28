@@ -1,5 +1,6 @@
 from lipnet_dataset import DatasetPD
 from tf_lipnet import tf_lipnet_train
+from tf_lipnet import FLAGS
 
 def train():
     """
@@ -8,14 +9,24 @@ def train():
     """
     problem = 'packiging'
     dir = '/home/sergii/Documents/microscopic_data/{}/'
-    path_to_json = dir + '{}_train_set.json'
+    path_to_json = dir + '{}_{}_set.json'
     path_to_img = dir + 'images/without_padding/'
+    batch_size = 500
 
+    FLAGS.batch_size = batch_size
     # create train set
-    train_set = DatasetPD(path_to_json.format(problem, problem))
+    train_set = DatasetPD(path_to_json.format(problem, problem, 'train'),
+                          path_to_img.format(problem),
+                          batch_size=batch_size)
+
+    validation_set = DatasetPD(path_to_json.format(problem, problem, 'validation'),
+                               path_to_img.format(problem),
+                               batch_size=batch_size,
+                               num_epochs=1)
     #train_set.print_stats()
     # start training
     tf_lipnet_train.train(train_set,
+                          validation_set,
                           path_to_img.format(problem),
                           10000)
 

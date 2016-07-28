@@ -118,7 +118,7 @@ class DatasetPD(DatasetAbstract):
         try:
             ids = self.__chunks.next()
         except StopIteration:
-            if self.__reset():
+            if self.__try_reset():
                 return self.next_batch()
             else:
                 return None
@@ -128,22 +128,23 @@ class DatasetPD(DatasetAbstract):
         """
         Creates a batch from example ids
         :param ids: list of int, ids of examples
-        :return: tuple
+        :return: an instance of Batch class
         """
         img_names = self.__df['Image'][self.__df['Id'].isin(ids)]
-        images = np.empty([len(img_names), self.__image_width, self.__image_height], dtype=float)
+        images = np.empty([len(img_names), self.__image_width, self.__image_height, 1], dtype=float)
         i = 0
         for f in img_names:
             filename = os.path.join(self.__path_to_img, f)
             img = io.imread(filename)
             img = img_as_float(img)
             img = resize(img, (self.__image_width, self.__image_height))
+            img = img.reshape((self.__image_width, self.__image_height, 1))
             images[i] = img
             i += 1
         labels = self.__df[self.__class_columns][self.__df['Id'].isin(ids)].values
         return Batch(images, labels, np.array(ids))
 
-    def __reset(self):
+    def __try_reset(self):
         """
         Resets chunks if epochs limit is not reached
         :return: boolean
@@ -155,6 +156,14 @@ class DatasetPD(DatasetAbstract):
         self.__epoch_count += 1
         self.__create_chunks()
         return True
+
+    def reset(self):
+        """
+        Resets epoch count and chunks generator
+        :return: nothing
+        """
+        self.__epoch_count = 0
+        self.__create_chunks()
 
     def print_stats(self):
         """

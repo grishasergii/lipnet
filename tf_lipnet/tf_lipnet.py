@@ -14,6 +14,7 @@ def _variable_on_cpu(name, shape, initializer):
     with tf.device('/cpu:0'):
         dtype = tf.float32
         var = tf.get_variable(name, shape, initializer=initializer, dtype=dtype)
+
     return var
 
 
@@ -77,10 +78,10 @@ def get_predictions(images, batch_size):
     #
     # First convolutional layer conv1
     NUM_CLASSES = 3
-
+    kernel_outputs = 32
     with tf.variable_scope('conv1') as scope:
         # 5x5 convolution 1 input 64 outputs
-        kernel = tf.Variable(tf.random_normal([3, 3, 1, 32], stddev=5e-2))
+        kernel = tf.Variable(tf.random_normal([3, 3, 1, kernel_outputs], stddev=5e-2))
         conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
         biases = _variable_on_cpu('biases', [32], tf.constant_initializer(0.0))
         bias = tf.nn.bias_add(conv, biases)
@@ -90,15 +91,22 @@ def get_predictions(images, batch_size):
 
 
     # Pooling layer: maxpool
-    pool1 = tf.nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1],
+    pooling_size = 2
+    pool1 = tf.nn.max_pool(conv1, ksize=[1, pooling_size, pooling_size, 1], strides=[1, pooling_size, pooling_size, 1],
                            padding='SAME', name='pool1')
 
     # Normalization
-    norm1 = tf.nn.local_response_normalization(pool1, 4, name="norm1")
+    #norm1 = tf.nn.local_response_normalization(pool1, 4, name="norm1")
 
     # fully connected layer
+    #batch_size = images.get_shape()[0]
+
+    # an ugly hack to calculate length of flattened image after convolution and max pooling applied
+    # it is done because tensorflow does not handle tensors of dynamic size in easy way
+    n = FLAGS.image_width * FLAGS.image_height * kernel_outputs / (pooling_size * pooling_size)
     with tf.variable_scope('fc1') as scope:
-        reshape = tf.reshape(pool1, [batch_size, -1])
+        reshape = tf.reshape(pool1, tf.pack([batch_size, -1]))
+        reshape.set_shape([None, n])
         dim = reshape.get_shape()[1].value
         weights = _variable_on_cpu('weights', [dim, 384], tf.truncated_normal_initializer(stddev=0.04))
         biases = _variable_on_cpu('biases', [384], tf.constant_initializer(0.1))

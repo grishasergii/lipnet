@@ -1,7 +1,5 @@
 import tensorflow as tf
-import pandas as pd
-import numpy as np
-import os.path
+from . import FLAGS
 
 
 def read_image_from_disk(input_queue, path):
@@ -15,7 +13,10 @@ def read_image_from_disk(input_queue, path):
     file_contents = tf.read_file(path + input_queue[0])
     example = tf.image.decode_jpeg(file_contents, channels=1)
     # resize image
-    w = h = 28
+    w = FLAGS.image_width
+    h = FLAGS.image_height
+    # we have to resize images, there is no way to have variable image sizes within a batch in tensorflow
+    # http://stackoverflow.com/questions/37682097/tensorflow-variable-images-size-within-single-batch
     example = tf.image.resize_images(example, w, h)
 
     return example, label
