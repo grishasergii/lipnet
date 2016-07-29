@@ -78,9 +78,6 @@ def train(train_set, validation_set, path_to_images, max_steps):
         sess = tf.Session()
         sess.run(init)
 
-        # Start the queue runners
-        tf.train.start_queue_runners(sess=sess)
-
         # Create a summary writer
         summary_writer = tf.train.SummaryWriter(FLAGS.log_train_dir, sess.graph)
         max_steps = 201

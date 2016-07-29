@@ -185,6 +185,13 @@ class DatasetPD(DatasetAbstract):
         shuffle(list_of_ids)
         self.__chunks = self.chunks(list_of_ids, self.__batch_size)
 
+    def get_id_sorted_labels(self):
+        """
+        Returns labels sorted by example id
+        :return: numpy array
+        """
+        return self.__df.sort(columns=['Id'])[self.__class_columns].values
+
     # DatasetAbstract methods
 
     def get_count(self):
