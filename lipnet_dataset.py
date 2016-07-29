@@ -66,16 +66,6 @@ class DatasetPD(DatasetAbstract):
     """
     This is an implementation of lipnet dataset based on pandas dataframe and JSON
     """
-    __df = pd.DataFrame()
-    __shape = None
-    __class_columns = None
-    __chunks = None
-    __num_epochs = None
-    __epoch_count = 0
-    __batch_size = 100
-    __path_to_img = None
-    __image_width = 28
-    __image_height = 28
 
     def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28):
         """
@@ -90,6 +80,7 @@ class DatasetPD(DatasetAbstract):
         self.__shape = self.__df.shape
         self.__class_columns = [col for col in list(self.__df) if col.startswith('Label')]
         self.__num_epochs = num_epochs
+        self.__epochs_count = 0
         self.__image_height = image_height
         self.__image_width = image_width
         self.__path_to_img = path_to_img

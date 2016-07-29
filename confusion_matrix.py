@@ -39,14 +39,16 @@ class ConfusionTable:
 
         self.false_negative = np.count_nonzero(np.logical_and(np.logical_not(mask_predictions),
                                                               mask_labels))
-
-        self.sensitivity = self.true_positive / (self.true_positive + self.false_negative)
-        self.specificity = self.true_negative / (self.false_positive + self.true_negative)
-        self.precision = self.true_positive / (self.true_positive + self.false_positive)
-        self.negative_predictive_value = self.true_negative / (self.true_negative + self.false_negative)
-        self.false_positive_rate = 1 - self.specificity
-        self.false_discovery_rate = 1 - self.precision
-        self.miss_rate = 1 - self.sensitivity
+        try:
+            self.sensitivity = self.true_positive / (self.true_positive + self.false_negative)
+            self.specificity = self.true_negative / (self.false_positive + self.true_negative)
+            self.precision = self.true_positive / (self.true_positive + self.false_positive)
+            self.negative_predictive_value = self.true_negative / (self.true_negative + self.false_negative)
+            self.false_positive_rate = 1 - self.specificity
+            self.false_discovery_rate = 1 - self.precision
+            self.miss_rate = 1 - self.sensitivity
+        except ZeroDivisionError:
+            pass
 
 
     def __str__(self):
