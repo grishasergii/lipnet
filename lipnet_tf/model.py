@@ -81,7 +81,7 @@ def get_predictions(images, batch_size):
     kernel_outputs = 64
     with tf.variable_scope('conv1') as scope:
         # 5x5 convolution 1 input 64 outputs
-        kernel = tf.Variable(tf.random_normal([3, 3, 1, kernel_outputs], stddev=5e-2))
+        kernel = tf.Variable(tf.random_normal([5, 5, 1, kernel_outputs], stddev=5e-2))
         conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
         biases = _variable_on_cpu('biases', [kernel_outputs], tf.constant_initializer(0.0))
         bias = tf.nn.bias_add(conv, biases)
@@ -96,16 +96,32 @@ def get_predictions(images, batch_size):
                            padding='SAME', name='pool1')
 
     # Normalization
-    #norm1 = tf.nn.local_response_normalization(pool1, 4, name="norm1")
+    norm1 = tf.nn.local_response_normalization(pool1, 4, name="norm1")
+
+    with tf.variable_scope('conv2') as scope:
+        kernel = tf.Variable(tf.random_normal([5, 5, kernel_outputs, kernel_outputs]))
+        conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
+        biases = _variable_on_cpu('biases', [kernel_outputs], tf.constant_initializer(0.1))
+        bias = tf.nn.bias_add(conv, biases)
+        conv2 = tf.nn.relu(bias, name=scope.name)
+        _activation_summary(conv2)
+
+    norm_size = 4
+    norm2 = tf.nn.local_response_normalization(conv2, norm_size, name='norm2')
+    pool2 = tf.nn.max_pool(norm2, ksize=[1, pooling_size, pooling_size, 1],
+                           strides=[1, pooling_size, pooling_size, 1],
+                           padding='SAME',
+                           name='pool2')
 
     # fully connected layer
     #batch_size = images.get_shape()[0]
 
     # an ugly hack to calculate length of flattened image after convolution and max pooling applied
     # it is done because tensorflow does not handle tensors of dynamic size in easy way
-    n = FLAGS.image_width * FLAGS.image_height * kernel_outputs / (pooling_size * pooling_size)
+    n = FLAGS.image_width * FLAGS.image_height * kernel_outputs / \
+        (pooling_size * pooling_size * norm_size)
     with tf.variable_scope('fc1') as scope:
-        reshape = tf.reshape(pool1, tf.pack([batch_size, -1]))
+        reshape = tf.reshape(pool2, tf.pack([batch_size, -1]))
         reshape.set_shape([None, n])
         dim = reshape.get_shape()[1].value
         weights = _variable_on_cpu('weights', [dim, 384], tf.truncated_normal_initializer(stddev=0.04))
@@ -114,11 +130,18 @@ def get_predictions(images, batch_size):
         fc1 = tf.nn.relu(preactivations, name=scope.name)
         _activation_summary(fc1)
 
+    with tf.variable_scope('fc2') as scope:
+        weights = _variable_on_cpu('weights', [384, 192], tf.truncated_normal_initializer(stddev=0.04))
+        biases = _variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
+        preactivations = tf.add(tf.matmul(fc1, weights), biases)
+        fc2 = tf.nn.relu(preactivations, name=scope.name)
+        _activation_summary(fc2)
+
     # output layer
     with tf.variable_scope('softmax_linear') as scope:
-        weights = _variable_on_cpu('weights', [384, NUM_CLASSES], tf.truncated_normal_initializer(stddev=0.04))
-        biases_sf = _variable_on_cpu('biases', [NUM_CLASSES], tf.constant_initializer(0.1))
-        logits = tf.add(tf.matmul(fc1, weights), biases_sf, name=scope.name)
+        weights = _variable_on_cpu('weights', [192, NUM_CLASSES], tf.truncated_normal_initializer(stddev=1/192))
+        biases_sf = _variable_on_cpu('biases', [NUM_CLASSES], tf.constant_initializer(0))
+        logits = tf.add(tf.matmul(fc2, weights), biases_sf, name=scope.name)
         softmax = tf.nn.softmax(logits)
         #_activation_summary(logits)
 
