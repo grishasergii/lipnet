@@ -80,7 +80,7 @@ class DatasetPD(DatasetAbstract):
         self.__shape = self.__df.shape
         self.__class_columns = [col for col in list(self.__df) if col.startswith('Label')]
         self.__num_epochs = num_epochs
-        self.__epochs_count = 0
+        self.__epoch_count = 0
         self.__image_height = image_height
         self.__image_width = image_width
         self.__path_to_img = path_to_img
