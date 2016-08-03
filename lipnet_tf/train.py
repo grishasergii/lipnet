@@ -37,7 +37,7 @@ def train(train_set, validation_set, path_to_images, max_steps):
     if validation_set is not None:
         assert train_set.get_num_classes() == validation_set.get_num_classes(),\
             "Number of classes in train and validation sets must be the same"
-
+    num_classes = train_set.get_num_classes()
     # Prepare output directories. Empty them if exist, otherwise create
     _prepare_dir(FLAGS.log_train_dir)
     _prepare_dir(FLAGS.checkpoint_dir)
@@ -53,7 +53,7 @@ def train(train_set, validation_set, path_to_images, max_steps):
 
         # Build a graph that computes the logits predictions.
         # predictions - predicted probabilities of belonging to any of classes
-        logits, predictions = model.get_predictions(images, batch_size)
+        logits, predictions = model.get_predictions(images, batch_size, num_classes)
 
         # calculate loss
         loss = model.get_loss(logits, labels)

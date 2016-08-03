@@ -24,7 +24,7 @@ def evaluate(dataset):
         labels = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
-        logits, predictions = model.get_predictions(images, batch_size)
+        logits, predictions = model.get_predictions(images, batch_size, dataset.get_num_classes())
 
         loss = model.get_loss(logits, labels)
         accuracy = model.get_accuracy(predictions, labels)

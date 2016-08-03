@@ -67,7 +67,51 @@ def _fc_nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.sigm
     #with tf.name_scope(layer_name):
 
 
-def get_predictions(images, batch_size):
+def _conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=tf.nn.relu):
+    """
+    Reusable code for making a convolutional layer.
+    Good summary of what convolutional layer is
+    http://stackoverflow.com/questions/34619177/what-does-tf-nn-conv2d-do-in-tensorflow
+    :param name: string, layer name, used for summaries and improves readability of tensorboard
+    :param input_tensor: tensor, input to the layer
+    :param filter_size: 1 x 2 tensor, height and width of filter
+    :param filter_num: int, number of output channels, or number of filters
+    :param stride: 1 x 2 tensor, steps in each direction. [1, 1] by default, i.e. whole image is used
+    :param act: reference to activation function, it is relu by default
+    :return: tensor, activations
+    """
+    # get number of channels in input
+    input_channels = input_tensor.get_shape()[3].value
+    with tf.variable_scope(name) as scope:
+        # prepare dimension of filter
+        filter_dim = filter_size + [input_channels, filter_num]
+
+        # make filter variable
+        filter = tf.Variable(tf.random_normal(filter_dim, stddev=0), name='filter')
+
+        # add 1 to the right and to the left of stride
+        # first 1 corresponds to batch, images
+        # last 1 corresponds to channels
+        # we generally do not want to skip any images iin the batch or any channels
+        strides = [1] + stride + [1]
+
+        # make convolution operation
+        conv = tf.nn.conv2d(input_tensor, filter, strides, padding='SAME')
+
+        # make and apply biases
+        biases = _variable_on_cpu('biases', [filter_num], tf.constant_initializer(0.1))
+        preactivations = tf.nn.bias_add(conv, biases)
+
+        # calculate activations
+        activations = tf.nn.relu(preactivations, name=scope.name)
+
+        # create summary op
+        _activation_summary(activations)
+
+        return activations
+
+
+def get_predictions(images, batch_size, num_classes):
     """
     Build the lipnet model, feed images and get predictions of classes
     :param images: images to classify
@@ -77,8 +121,13 @@ def get_predictions(images, batch_size):
     # if you want to train lipnet on multiple GPU.
     #
     # First convolutional layer conv1
-    NUM_CLASSES = 3
-    kernel_outputs = 64
+    filter_num = 64
+
+    conv1 = _conv_layer('conv1',
+                        images,
+                        [5, 5],
+                        filter_num)
+    """
     with tf.variable_scope('conv1') as scope:
         # 5x5 convolution 1 input 64 outputs
         kernel = tf.Variable(tf.random_normal([5, 5, 1, kernel_outputs], stddev=5e-2))
@@ -88,7 +137,7 @@ def get_predictions(images, batch_size):
         conv1 = tf.nn.relu(bias, name=scope.name)
         _activation_summary(conv1)
         # _activation_summary
-
+    """
 
     # Pooling layer: maxpool
     pooling_size = 2
@@ -98,14 +147,19 @@ def get_predictions(images, batch_size):
     # Normalization
     norm1 = tf.nn.local_response_normalization(pool1, 4, name="norm1")
 
+    conv2 = _conv_layer('conv2',
+                        norm1,
+                        [5, 5],
+                        filter_num)
+    """
     with tf.variable_scope('conv2') as scope:
-        kernel = tf.Variable(tf.random_normal([5, 5, kernel_outputs, kernel_outputs]))
+        kernel = tf.Variable(tf.random_normal([5, 5, filter_num, filter_num]))
         conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = _variable_on_cpu('biases', [kernel_outputs], tf.constant_initializer(0.1))
+        biases = _variable_on_cpu('biases', [filter_num], tf.constant_initializer(0.1))
         bias = tf.nn.bias_add(conv, biases)
         conv2 = tf.nn.relu(bias, name=scope.name)
         _activation_summary(conv2)
-
+    """
     norm_size = 4
     norm2 = tf.nn.local_response_normalization(conv2, norm_size, name='norm2')
     pool2 = tf.nn.max_pool(norm2, ksize=[1, pooling_size, pooling_size, 1],
@@ -118,7 +172,7 @@ def get_predictions(images, batch_size):
 
     # an ugly hack to calculate length of flattened image after convolution and max pooling applied
     # it is done because tensorflow does not handle tensors of dynamic size in easy way
-    n = FLAGS.image_width * FLAGS.image_height * kernel_outputs / \
+    n = FLAGS.image_width * FLAGS.image_height * filter_num / \
         (pooling_size * pooling_size * norm_size)
     with tf.variable_scope('fc1') as scope:
         reshape = tf.reshape(pool2, tf.pack([batch_size, -1]))
@@ -139,8 +193,8 @@ def get_predictions(images, batch_size):
 
     # output layer
     with tf.variable_scope('softmax_linear') as scope:
-        weights = _variable_on_cpu('weights', [192, NUM_CLASSES], tf.truncated_normal_initializer(stddev=1/192))
-        biases_sf = _variable_on_cpu('biases', [NUM_CLASSES], tf.constant_initializer(0))
+        weights = _variable_on_cpu('weights', [192, num_classes], tf.truncated_normal_initializer(stddev=1/192))
+        biases_sf = _variable_on_cpu('biases', [num_classes], tf.constant_initializer(0))
         logits = tf.add(tf.matmul(fc2, weights), biases_sf, name=scope.name)
         softmax = tf.nn.softmax(logits)
         #_activation_summary(logits)
