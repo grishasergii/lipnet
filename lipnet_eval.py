@@ -3,12 +3,23 @@ from lipnet_tf import evaluate as lptf
 from lipnet_tf import FLAGS
 import numpy as np
 import os
-from datetime import datetime
+import sys
+import getopt
 import confusion_matrix as cf
+
+dataset_name = None
+options, remainder = getopt.getopt(sys.argv[1:], '', ['dataset='])
+for opt, arg in options:
+    if opt in ('--dataset'):
+        dataset_name = arg
+
+if dataset_name is None:
+    dataset_name = 'test'
+
 
 problem = 'packiging'
 dir = '/home/sergii/Documents/microscopic_data/{}/'
-path_to_json = dir + '{}_train_set.json'
+path_to_json = dir + '{}_' + dataset_name + '_set.json'
 path_to_img = dir + 'images/without_padding/'
 
 def evaluate():
