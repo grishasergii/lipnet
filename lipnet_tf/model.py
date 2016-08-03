@@ -51,25 +51,46 @@ def _loss_summary(x):
     """
 
 
-def _fc_nn_layer(input_tensor, input_dim, output_dim, layer_name, act=tf.nn.sigmoid):
+def _fc_nn_layer(name, input_tensor, nodes, act=tf.nn.relu, return_preactivations=False):
     """
     Reusable code for making a simple fully connected neural net layer.
     It does a matrix multiply, bias add, and then uses act function (sigmoid by default).
     It also sets up name scoping so that the resultant graph is easy to read and adds a number
     of summary operations.
+    :param name: string, layer name, used for summaries and improves readability of tensorboard
     :param input_tensor: tensor, input to the layer
-    :param input_dim: tensor
-    :param output_dim: tensor
-    :param layer_name: string
-    :param act: tf.nn activation function
+    :param nodes: int, number of nodes in the layer, i.e. number of outputs
+    :param act: tf.nn activation function, relu by default
+    :param return_preactivations: boolean, whether or not return preactivations
     :return: tensor, activations
     """
-    #with tf.name_scope(layer_name):
+    n_inputs = input_tensor.get_shape()[1].value
+    with tf.variable_scope(name) as scope:
+        # create weights
+        weights = _variable_on_cpu('weights', [n_inputs, nodes], tf.truncated_normal_initializer(stddev=0.04))
+
+        # create biases
+        biases = _variable_on_cpu('biases', [nodes], tf.constant_initializer(0.1))
+
+        # multiply inputs with weights andd add bias
+        preactivations = tf.add(tf.matmul(input_tensor, weights), biases)
+
+        # apply activation function
+        activations =act(preactivations, name=scope.name)
+
+        # create summary op
+        _activation_summary(activations)
+
+        if return_preactivations:
+            return preactivations, activations
+
+        return activations
+
 
 
 def _conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=tf.nn.relu):
     """
-    Reusable code for making a convolutional layer.
+    Reusable code for making a convolutional neural net layer.
     Good summary of what convolutional layer is
     http://stackoverflow.com/questions/34619177/what-does-tf-nn-conv2d-do-in-tensorflow
     :param name: string, layer name, used for summaries and improves readability of tensorboard
@@ -77,7 +98,7 @@ def _conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=
     :param filter_size: 1 x 2 tensor, height and width of filter
     :param filter_num: int, number of output channels, or number of filters
     :param stride: 1 x 2 tensor, steps in each direction. [1, 1] by default, i.e. whole image is used
-    :param act: reference to activation function, it is relu by default
+    :param act: tf.nn activation function, relu by default
     :return: tensor, activations
     """
     # get number of channels in input
@@ -103,7 +124,7 @@ def _conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=
         preactivations = tf.nn.bias_add(conv, biases)
 
         # calculate activations
-        activations = tf.nn.relu(preactivations, name=scope.name)
+        activations = act(preactivations, name=scope.name)
 
         # create summary op
         _activation_summary(activations)
@@ -127,17 +148,6 @@ def get_predictions(images, batch_size, num_classes):
                         images,
                         [5, 5],
                         filter_num)
-    """
-    with tf.variable_scope('conv1') as scope:
-        # 5x5 convolution 1 input 64 outputs
-        kernel = tf.Variable(tf.random_normal([5, 5, 1, kernel_outputs], stddev=5e-2))
-        conv = tf.nn.conv2d(images, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = _variable_on_cpu('biases', [kernel_outputs], tf.constant_initializer(0.0))
-        bias = tf.nn.bias_add(conv, biases)
-        conv1 = tf.nn.relu(bias, name=scope.name)
-        _activation_summary(conv1)
-        # _activation_summary
-    """
 
     # Pooling layer: maxpool
     pooling_size = 2
@@ -151,15 +161,7 @@ def get_predictions(images, batch_size, num_classes):
                         norm1,
                         [5, 5],
                         filter_num)
-    """
-    with tf.variable_scope('conv2') as scope:
-        kernel = tf.Variable(tf.random_normal([5, 5, filter_num, filter_num]))
-        conv = tf.nn.conv2d(norm1, kernel, [1, 1, 1, 1], padding='SAME')
-        biases = _variable_on_cpu('biases', [filter_num], tf.constant_initializer(0.1))
-        bias = tf.nn.bias_add(conv, biases)
-        conv2 = tf.nn.relu(bias, name=scope.name)
-        _activation_summary(conv2)
-    """
+
     norm_size = 4
     norm2 = tf.nn.local_response_normalization(conv2, norm_size, name='norm2')
     pool2 = tf.nn.max_pool(norm2, ksize=[1, pooling_size, pooling_size, 1],
@@ -174,30 +176,22 @@ def get_predictions(images, batch_size, num_classes):
     # it is done because tensorflow does not handle tensors of dynamic size in easy way
     n = FLAGS.image_width * FLAGS.image_height * filter_num / \
         (pooling_size * pooling_size * norm_size)
-    with tf.variable_scope('fc1') as scope:
-        reshape = tf.reshape(pool2, tf.pack([batch_size, -1]))
-        reshape.set_shape([None, n])
-        dim = reshape.get_shape()[1].value
-        weights = _variable_on_cpu('weights', [dim, 384], tf.truncated_normal_initializer(stddev=0.04))
-        biases = _variable_on_cpu('biases', [384], tf.constant_initializer(0.1))
-        preactivations = tf.add(tf.matmul(reshape, weights), biases)
-        fc1 = tf.nn.relu(preactivations, name=scope.name)
-        _activation_summary(fc1)
+    reshape = tf.reshape(pool2, tf.pack([batch_size, -1]))
+    reshape.set_shape([None, n])
 
-    with tf.variable_scope('fc2') as scope:
-        weights = _variable_on_cpu('weights', [384, 192], tf.truncated_normal_initializer(stddev=0.04))
-        biases = _variable_on_cpu('biases', [192], tf.constant_initializer(0.1))
-        preactivations = tf.add(tf.matmul(fc1, weights), biases)
-        fc2 = tf.nn.relu(preactivations, name=scope.name)
-        _activation_summary(fc2)
+    fc1 = _fc_nn_layer('fc1',
+                       reshape,
+                       384)
 
-    # output layer
-    with tf.variable_scope('softmax_linear') as scope:
-        weights = _variable_on_cpu('weights', [192, num_classes], tf.truncated_normal_initializer(stddev=1/192))
-        biases_sf = _variable_on_cpu('biases', [num_classes], tf.constant_initializer(0))
-        logits = tf.add(tf.matmul(fc2, weights), biases_sf, name=scope.name)
-        softmax = tf.nn.softmax(logits)
-        #_activation_summary(logits)
+    fc2 = _fc_nn_layer('fc2',
+                       fc1,
+                       192)
+
+    logits, softmax = _fc_nn_layer('softmax_linear',
+                                   fc2,
+                                   num_classes,
+                                   act=tf.nn.softmax,
+                                   return_preactivations=True)
 
     return logits, softmax
 
