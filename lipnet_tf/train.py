@@ -26,7 +26,7 @@ def _prepare_dir(directory):
     tf.gfile.MakeDirs(directory)
 
 
-def train(train_set, validation_set, path_to_images, max_steps):
+def train(train_set, validation_set, layer_definitions):
     """
     Train lipnet CNN with Tensorflow
     :param train_set: object that implements DatasetAbstract contract
@@ -53,7 +53,7 @@ def train(train_set, validation_set, path_to_images, max_steps):
 
         # Build a graph that computes the logits predictions.
         # predictions - predicted probabilities of belonging to any of classes
-        logits, predictions = model.get_predictions(images, batch_size, num_classes)
+        logits, predictions = model.get_predictions(images, batch_size, num_classes, layer_definitions)
 
         # calculate loss
         loss = model.get_loss(logits, labels)
@@ -63,7 +63,7 @@ def train(train_set, validation_set, path_to_images, max_steps):
 
         # Build a Graph that trains the model with one batch of examples
         # and updates the model parameters
-        train_op = model.train(loss, global_step, FLAGS.batch_size)
+        train_op = model.train(loss)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables())

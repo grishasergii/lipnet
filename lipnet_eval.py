@@ -8,7 +8,7 @@ import confusion_matrix as cf
 
 problem = 'packiging'
 dir = '/home/sergii/Documents/microscopic_data/{}/'
-path_to_json = dir + '{}_test_set.json'
+path_to_json = dir + '{}_train_set.json'
 path_to_img = dir + 'images/without_padding/'
 
 def evaluate():
@@ -48,8 +48,8 @@ def analyze():
 
 
 def main(argv=None):
-    #evaluate()
-    analyze()
+    evaluate()
+    #analyze()
 
 if __name__ == '__main__':
     main()

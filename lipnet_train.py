@@ -1,6 +1,7 @@
 from lipnet_dataset import DatasetPD
 from lipnet_tf import train as lptf
 from lipnet_tf import FLAGS
+from lipnet_architecture import *
 
 def train():
     """
@@ -18,18 +19,63 @@ def train():
     train_set = DatasetPD(path_to_json.format(problem, problem, 'train'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
-                          num_epochs=1)
+                          num_epochs=100)
 
     validation_set = DatasetPD(path_to_json.format(problem, problem, 'validation'),
                                path_to_img.format(problem),
                                batch_size=batch_size,
                                num_epochs=1)
-    #train_set.print_stats()
+
+    # define network architecture
+    layer_definitions = [
+        LayerDefinition(layer_type=LayerEnum.Convolutional,
+                        name='conv1',
+                        filter_size=[5, 5],
+                        filter_num=64,
+                        strides=[1, 1],
+                        activation_function=ActivationFunctionEnum.Relu),
+        LayerDefinition(layer_type=LayerEnum.PoolingMax,
+                        name='pooling1',
+                        pooling_size=[3, 3],
+                        strides=[2, 2]),
+        LayerDefinition(layer_type=LayerEnum.Normalization,
+                        name='norm1',
+                        depth_radius=5),
+        LayerDefinition(layer_type=LayerEnum.Convolutional,
+                        name='conv2',
+                        filter_size=[5, 5],
+                        filter_num=64,
+                        strides=[1, 1],
+                        activation_function=ActivationFunctionEnum.Relu),
+        LayerDefinition(layer_type=LayerEnum.PoolingMax,
+                        name='pooling2',
+                        pooling_size=[3, 3],
+                        strides=[2, 2]),
+        LayerDefinition(layer_type=LayerEnum.Normalization,
+                        name='norm2',
+                        depth_radius=5),
+        LayerDefinition(layer_type=LayerEnum.FullyConnected,
+                        name='fc1',
+                        fc_nodes=384,
+                        activation_function=ActivationFunctionEnum.Relu,
+                        return_preactivations=False),
+        LayerDefinition(layer_type=LayerEnum.FullyConnected,
+                        name='fc2',
+                        fc_nodes=192,
+                        activation_function=ActivationFunctionEnum.Relu,
+                        return_preactivations=False),
+        LayerDefinition(layer_type=LayerEnum.FullyConnected,
+                        name='softmax_linear',
+                        fc_nodes=train_set.get_num_classes(),
+                        activation_function=ActivationFunctionEnum.Softmax,
+                        return_preactivations=True),
+
+    ]
+
     # start training
     lptf.train(train_set,
                 None,
-                path_to_img.format(problem),
-                10000)
+                layer_definitions)
 
 
 def main(argv=None):
