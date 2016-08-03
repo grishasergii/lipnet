@@ -2,9 +2,10 @@ from __future__ import division
 import tensorflow as tf
 from . import FLAGS
 import model
-import math
+import os
 from datetime import datetime
 import numpy as np
+import pickle
 
 
 def evaluate(dataset):
@@ -19,12 +20,16 @@ def evaluate(dataset):
         tf.gfile.DeleteRecursively(FLAGS.log_eval_dir)
     tf.gfile.MakeDirs(FLAGS.log_eval_dir)
 
+    layer_def_path = os.path.join(FLAGS.checkpoint_dir, 'layer_definitions.pickle')
+    with open(layer_def_path, 'rb') as handle:
+        layer_definitions = pickle.load(handle)
+
     with tf.Graph().as_default() as g:
         images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images_input')
         labels = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
-        logits, predictions = model.get_predictions(images, batch_size, dataset.get_num_classes())
+        logits, predictions = model.get_predictions(images, batch_size, layer_definitions)
 
         loss = model.get_loss(logits, labels)
         accuracy = model.get_accuracy(predictions, labels)

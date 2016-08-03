@@ -6,6 +6,7 @@ import contextlib
 import numpy as np
 import os.path
 from . import FLAGS
+import pickle
 
 @contextlib.contextmanager
 def printoptions(*args, **kwargs):
@@ -52,8 +53,8 @@ def train(train_set, validation_set, layer_definitions):
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
         # Build a graph that computes the logits predictions.
-        # predictions - predicted probabilities of belonging to any of classes
-        logits, predictions = model.get_predictions(images, batch_size, num_classes, layer_definitions)
+        # predictions - predicted probabilities of belonging to all classes
+        logits, predictions = model.get_predictions(images, batch_size, layer_definitions)
 
         # calculate loss
         loss = model.get_loss(logits, labels)
@@ -122,5 +123,11 @@ def train(train_set, validation_set, layer_definitions):
                 checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
                 saver.save(sess, checkpoint_path, global_step=step)
 
+        # save final checkpoint
         checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)
+
+        # save layer definitions
+        layer_def_path = os.path.join(FLAGS.checkpoint_dir, 'layer_definitions.pickle')
+        with open(layer_def_path, 'wb') as handle:
+            pickle.dump(layer_definitions, handle)

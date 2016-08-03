@@ -55,7 +55,7 @@ def _get_layer_from_definition(layer_definition, batch_size):
 
     return None
 
-def get_predictions(images, batch_size, num_classes, layer_definitions):
+def get_predictions(images, batch_size, layer_definitions):
     """
     Build the lipnet model, feed images and get predictions of classes
     :param images: images to classify
