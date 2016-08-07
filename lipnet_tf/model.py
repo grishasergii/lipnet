@@ -128,8 +128,8 @@ def train(total_loss):
     """
 
     lr = 0.1
-    #train_op = tf.train.AdamOptimizer(learning_rate=lr).minimize(total_loss)
-    train_op = tf.train.GradientDescentOptimizer(learning_rate=0.1).minimize(total_loss)
+    train_op = tf.train.AdamOptimizer(learning_rate=lr).minimize(total_loss)
+    #train_op = tf.train.GradientDescentOptimizer(learning_rate=0.1).minimize(total_loss)
     """
     with tf.control_dependencies([total_loss]):
         opt = tf.train.AdamOptimizer(learning_rate=lr)

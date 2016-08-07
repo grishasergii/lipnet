@@ -49,6 +49,7 @@ def train(train_set, validation_set, layer_definitions):
         # get images and labels, training set
 
         images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images_input')
+        #images = tf.placeholder(tf.float32, [None, 11], name='images_input')
         labels = tf.placeholder(tf.float32, [None, train_set.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
@@ -102,12 +103,12 @@ def train(train_set, validation_set, layer_definitions):
 
             if validation_set is not None and step % 10 == 0:
                 # perform evaluation on validation set
-                print '%s: ...validating' % (datetime.now())
+                print '%s: ...evaluating validation set' % (datetime.now())
                 validation_set.reset()
                 batch_validation = validation_set.next_batch()
                 loss_value = acc = 0
                 while batch_validation is not None:
-                    loss_value_batch, acc_batch = sess.run([loss, accuracy],
+                    loss_value_batch, acc_batch, p = sess.run([loss, accuracy, predictions],
                                                            feed_dict={images: batch_validation.images,
                                                                       labels: batch_validation.labels,
                                                                       batch_size: batch_validation.size})

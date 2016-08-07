@@ -26,6 +26,7 @@ def evaluate(dataset):
 
     with tf.Graph().as_default() as g:
         images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images_input')
+        #images = tf.placeholder(tf.float32, [None, 11], name='images_input')
         labels = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='labels_input')
         batch_size = tf.placeholder(tf.int32, name='batch_size')
 
@@ -67,12 +68,7 @@ def evaluate(dataset):
                                                            feed_dict={images: batch.images,
                                                                       labels: batch.labels,
                                                                       batch_size: batch.size})
-                ids = np.expand_dims(batch.ids, axis=1)
-                if predictions_output is not None:
-                    predictions_output = np.append(predictions_output, np.append(ids, pr, axis=1), axis=0)
-                else:
-                    predictions_output = np.append(ids, pr, axis=1)
-
+                dataset.set_predictions(batch.ids, pr)
                 result_accuracy += (acc * batch.size)
                 result_loss += (l * batch.size)
                 step += 1
@@ -92,8 +88,8 @@ def evaluate(dataset):
             summary_writer.add_summary(summary, global_step)
 
             # sort predictions by id (first column)
-            predictions_output = predictions_output[predictions_output[:, 0].argsort()]
-            return predictions_output
+            dataset.evaluate()
+            return
 
 
 def main(argv=None):

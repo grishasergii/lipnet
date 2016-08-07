@@ -8,19 +8,20 @@ from skimage.transform import resize
 import numpy as np
 import sys
 import math
+import confusion_matrix as cf
 
 
 class Batch:
-    def __init__(self, images, labels, ids):
+    def __init__(self, data, labels, ids):
         """
 
-        :param images:
+        :param data:
         :param labels:
         :param ids:
         """
-        assert images.shape[0] == labels.shape[0], "Number of images and corresponding labels must be the same"
-        assert images.shape[0] == ids.shape[0], "Number of images and corresponding ids must be the same"
-        self.images = images
+        assert data.shape[0] == labels.shape[0], "Number of data and corresponding labels must be the same"
+        assert data.shape[0] == ids.shape[0], "Number of data and corresponding ids must be the same"
+        self.images = data
         self.labels = labels
         self.ids = ids
 
@@ -76,22 +77,26 @@ class DatasetPD(DatasetAbstract):
         :param num_epochs: integer, number of times whole dataset can be processed, leave NOne for unlimited
         """
         super(DatasetPD, self).__init__()
-        self.__df = pd.read_json(path_to_json)
-        self.__shape = self.__df.shape
-        self.__class_columns = [col for col in list(self.__df) if col.startswith('Label')]
-        self.__num_epochs = num_epochs
-        self.__epoch_count = 0
-        self.__image_height = image_height
-        self.__image_width = image_width
-        self.__path_to_img = path_to_img
-        self.__batch_size = batch_size
-        self.__create_chunks()
+        self._df = pd.read_json(path_to_json)
+        self._shape = self._df.shape
+        self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
+        self.num_epochs = num_epochs
+        self._epoch_count = 0
+        self._image_height = image_height
+        self._image_width = image_width
+        self._path_to_img = path_to_img
+        self._batch_size = batch_size
+        self._create_chunks()
+
+        self.__prediction_columns = [c + '_prediction' for c in self._class_columns]
+        for col in self.__prediction_columns:
+            self._df[col] = 0
 
     @property
     def num_steps(self):
-        if self.__num_epochs is None:
+        if self.num_epochs is None:
             return sys.maxint
-        return self.__num_epochs * math.ceil(self.get_count() / self.__batch_size)
+        return self.num_epochs * math.ceil(self.get_count() / self._batch_size)
 
     def chunks(self, items, chunk_size):
         """
@@ -116,26 +121,26 @@ class DatasetPD(DatasetAbstract):
                 return self.next_batch()
             else:
                 return None
-        return self.__get_batch(ids)
+        return self._get_batch(ids)
 
-    def __get_batch(self, ids):
+    def _get_batch(self, ids):
         """
         Creates a batch from example ids
         :param ids: list of int, ids of examples
         :return: an instance of Batch class
         """
-        img_names = self.__df['Image'][self.__df['Id'].isin(ids)]
-        images = np.empty([len(img_names), self.__image_width, self.__image_height, 1], dtype=float)
+        img_names = self._df['Image'][self._df['Id'].isin(ids)]
+        images = np.empty([len(img_names), self._image_width, self._image_height, 1], dtype=float)
         i = 0
         for f in img_names:
-            filename = os.path.join(self.__path_to_img, f)
+            filename = os.path.join(self._path_to_img, f)
             img = io.imread(filename)
             img = img_as_float(img)
-            img = resize(img, (self.__image_width, self.__image_height))
-            img = img.reshape((self.__image_width, self.__image_height, 1))
+            img = resize(img, (self._image_width, self._image_height))
+            img = img.reshape((self._image_width, self._image_height, 1))
             images[i] = img
             i += 1
-        labels = self.__df[self.__class_columns][self.__df['Id'].isin(ids)].values
+        labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
         return Batch(images, labels, np.array(ids))
 
     def __try_reset(self):
@@ -143,12 +148,12 @@ class DatasetPD(DatasetAbstract):
         Resets chunks if epochs limit is not reached
         :return: boolean
         """
-        if self.__num_epochs is not None:
-            if self.__epoch_count >= (self.__num_epochs - 1):
+        if self.num_epochs is not None:
+            if self._epoch_count >= (self.num_epochs - 1):
                 return False
 
-        self.__epoch_count += 1
-        self.__create_chunks()
+        self._epoch_count += 1
+        self._create_chunks()
         return True
 
     def reset(self):
@@ -156,32 +161,34 @@ class DatasetPD(DatasetAbstract):
         Resets epoch count and chunks generator
         :return: nothing
         """
-        self.__epoch_count = 0
-        self.__create_chunks()
+        for col in self.__prediction_columns:
+            self._df[col] = 0
+        self._epoch_count = 0
+        self._create_chunks()
 
     def print_stats(self):
         """
         Prints som dataframe statistics to console
         :return: nothing
         """
-        print '{} columns and {} rows'.format(self.__shape[1], self.__shape[0])
-        print self.__df['Class'].value_counts()
+        print '{} columns and {} rows'.format(self._shape[1], self._shape[0])
+        print self._df['Class'].value_counts()
 
-    def __create_chunks(self):
+    def _create_chunks(self):
         """
         Creates chunks
         :return: nothing, result is written to self.__chunks
         """
-        list_of_ids = self.__df['Id'].tolist()
+        list_of_ids = self._df['Id'].tolist()
         shuffle(list_of_ids)
-        self.__chunks = self.chunks(list_of_ids, self.__batch_size)
+        self.__chunks = self.chunks(list_of_ids, self._batch_size)
 
     def get_id_sorted_labels(self):
         """
         Returns labels sorted by example id
         :return: numpy array
         """
-        return self.__df.sort(columns=['Id'])[self.__class_columns].values
+        return self._df.sort(columns=['Id'])[self._class_columns].values
 
     # DatasetAbstract methods
 
@@ -190,11 +197,54 @@ class DatasetPD(DatasetAbstract):
         See description in DatasetAbstract
         :return:
         """
-        return self.__shape[0]
+        return self._shape[0]
 
     def get_num_classes(self):
         """
         See description in DatasetAbstract
         :return:
         """
-        return len(self.__class_columns)
+        return len(self._class_columns)
+
+    def set_predictions(self, ids, predictions):
+        """
+        Stores predictions in datatframe
+        :param ids: list of ints representing ids
+        :param predictions: 2d numpy array, number of columns must be equal to number of classes,
+                            number of rows must be equal to length of ids
+        :return: nothing
+        """
+        shape = predictions.shape
+        assert len(shape) == 2, "Predictions must be a 2d array"
+        assert shape[1] == self.get_num_classes(), "Number of classes in daatset and in predictions must be the same"
+        assert ids.ndim == 1, "ids must be a vector"
+        assert shape[0] == len(ids), "Number of ids and predictions must be the same"
+        self._df.loc[self._df.Id.isin(ids), self.__prediction_columns] = predictions
+
+    def evaluate(self):
+        confusion_matrix = cf.ConfusionMatrix(self._df[self.__prediction_columns].values,
+                                              self._df[self._class_columns].values)
+        confusion_matrix.print_to_console()
+
+
+class DatasetPDFeatures(DatasetPD):
+
+    def _get_batch(self, ids):
+        """
+        Creates a batch from example ids
+        :param ids: list of int, ids of examples
+        :return: an instance of Batch class
+        """
+        feature_names = ['Area',
+                         'Circularity',
+                         'DiametersInPixels',
+                         'Scale',
+                         'Perimeter',
+                         'Length',
+                         'MembraneThickness'
+                         ]
+        data = self._df[feature_names][self._df['Id'].isin(ids)].values
+        moments = np.array([np.array(xi) for xi in self._df['Moments'][self._df['Id'].isin(ids)].values])
+        data = np.concatenate((data, moments), axis=1)
+        labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
+        return Batch(data, labels, np.array(ids))

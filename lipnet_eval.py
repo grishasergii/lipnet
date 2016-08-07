@@ -1,4 +1,4 @@
-from lipnet_dataset import DatasetPD
+from lipnet_dataset import DatasetPD, DatasetPDFeatures
 from lipnet_tf import evaluate as lptf
 from lipnet_tf import FLAGS
 import numpy as np
@@ -17,7 +17,7 @@ if dataset_name is None:
     dataset_name = 'test'
 
 
-problem = 'packiging'
+problem = 'lamellarity'
 dir = '/home/sergii/Documents/microscopic_data/{}/'
 path_to_json = dir + '{}_' + dataset_name + '_set.json'
 path_to_img = dir + 'images/without_padding/'
@@ -37,26 +37,26 @@ def evaluate():
     FLAGS.batch_size = dataset.get_count()
     # start evaluation
 
-    predictions = lptf.evaluate(dataset)
+    lptf.evaluate(dataset)
 
     output_path = 'output/predictions/'
     if not os.path.isdir(output_path):
         os.makedirs(output_path)
     output_path += 'predictions.csv'
-    np.savetxt(output_path, predictions, fmt='%06d, %1.4f, %1.4f, %1.4f')
-    confusion_matrix = cf.ConfusionMatrix(predictions[:, 1:], dataset.get_id_sorted_labels())
-    confusion_matrix.print_to_console()
+    #np.savetxt(output_path, predictions, fmt='%06d, %1.4f, %1.4f, %1.4f')
+    #confusion_matrix = cf.ConfusionMatrix(predictions[:, 1:], dataset.get_id_sorted_labels())
+    #confusion_matrix.print_to_console()
 
 def analyze():
     # create a dataset
-    dataset = DatasetPD(path_to_json.format(problem, problem),
+    dataset = DatasetPDFeatures(path_to_json.format(problem, problem),
                         path_to_img.format(problem),
                         batch_size=500,
                         num_epochs=1)
-    predictions = np.loadtxt('output/predictions/predictions.csv', delimiter=',')
-    confusion_matrix = cf.ConfusionMatrix(predictions[:, 1:], dataset.get_id_sorted_labels())
-    confusion_matrix.print_to_console()
-
+    #predictions = np.loadtxt('output/predictions/predictions.csv', delimiter=',')
+    #confusion_matrix = cf.ConfusionMatrix(predictions[:, 1:], dataset.get_id_sorted_labels())
+    #confusion_matrix.print_to_console()
+    dataset.print_stats()
 
 def main(argv=None):
     evaluate()
