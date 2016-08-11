@@ -135,8 +135,8 @@ class ConfusionMatrix:
 
         :return:
         """
-        with printoptions(precision=4):
-            #print self.__confusion_matrix
-            #print '\n'
-            print 'Normalized confusion matrix:'
-            print self.__confusion_matrix_normalized
+        print 'Normalized confusion matrix'
+        for row in self.__confusion_matrix_normalized:
+            for col in row:
+                print "{:.2f}\t".format(col),
+            print ''

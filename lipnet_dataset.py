@@ -86,7 +86,10 @@ class DatasetPD(DatasetAbstract):
         self._image_height = image_height
         self._image_width = image_width
         self._path_to_img = path_to_img
-        self._batch_size = batch_size
+        if batch_size is not None:
+            self._batch_size = batch_size
+        else:
+            self._batch_size = self.get_count()
         self._chunks = None
 
         self._prediction_columns = [c + '_prediction' for c in self._class_columns]

@@ -7,6 +7,7 @@ import numpy as np
 import os.path
 from . import FLAGS
 import pickle
+import confusion_matrix as cf
 
 @contextlib.contextmanager
 def printoptions(*args, **kwargs):
@@ -134,3 +135,101 @@ def train(train_set, validation_set, layer_definitions):
         layer_def_path = os.path.join(FLAGS.checkpoint_dir, 'layer_definitions.pickle')
         with open(layer_def_path, 'wb') as handle:
             pickle.dump(layer_definitions, handle)
+
+def train_simple(dataset, test_set):
+    learning_rate = 0.01
+    n_input = 28 * 28
+    n_classes = 3
+    dropout = 0.75
+
+    # tf Graph input
+    x = tf.placeholder(tf.float32, [None, 28, 28, 1])
+    y = tf.placeholder(tf.float32, [None, 3])
+    keep_prob = tf.placeholder(tf.float32)
+
+    def conv2d(x, W, b, strides=1):
+        x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
+        x = tf.nn.bias_add(x, b)
+        return tf.nn.relu(x)
+
+    def maxpool2d(x, k=2):
+        return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
+
+    def conv_net(x, weights, biases, dropout):
+        conv1 = conv2d(x, weights['wc1'], biases['bc1'])
+        conv1 = maxpool2d(conv1, k=2)
+
+        conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
+        conv2 = maxpool2d(conv2, k=2)
+
+        fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
+        fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
+        fc1 = tf.nn.relu(fc1)
+        fc1 = tf.nn.dropout(fc1, dropout)
+
+        out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
+        return out
+
+    weights = {
+        'wc1': tf.Variable(tf.random_normal([4, 4, 1, 32])),
+        'wc2': tf.Variable(tf.random_normal([4, 4, 32, 64])),
+        'wd1': tf.Variable(tf.random_normal([7*7*64, 1024])),
+        'out': tf.Variable(tf.random_normal([1024, 3]))
+    }
+
+    biases = {
+        'bc1': tf.Variable(tf.random_normal([32])),
+        'bc2': tf.Variable(tf.random_normal([64])),
+        'bd1': tf.Variable(tf.random_normal([1024])),
+        'out': tf.Variable(tf.random_normal([3])),
+    }
+
+    pred = conv_net(x, weights, biases, keep_prob)
+    softmax = tf.nn.softmax(pred)
+    one_hot_pred = tf.argmax(pred, 1)
+
+    threshold = tf.constant(0.25, dtype=tf.float32)
+    raw_prob = tf.greater_equal(softmax, threshold)
+
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
+    correct_pred = tf.equal(one_hot_pred, tf.argmax(y, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+
+    init = tf.initialize_all_variables()
+
+    with tf.Session() as sess:
+        sess.run(init)
+        print 'Training...'
+        batch = dataset.next_batch()
+        while batch is not None:
+            batch_x = batch.images
+            batch_y = batch.labels
+
+            sess.run(optimizer, feed_dict={x: batch_x,
+                                           y: batch_y,
+                                           keep_prob: dropout})
+            loss, acc, p, rp = sess.run([cost, accuracy, softmax, raw_prob], feed_dict={x: batch_x,
+                                                              y: batch_y,
+                                                              keep_prob: 1.0})
+            print rp
+            print "Training: loss: {:.6f} accuracy: {:.4f}".format(loss, acc)
+            batch = dataset.next_batch()
+
+        print 'Evaluating...'
+        batch = test_set.next_batch()
+        while batch is not None:
+            batch_x = batch.images
+            batch_y = batch.labels
+
+            loss, acc, pr = sess.run([cost, accuracy, pred], feed_dict={x: batch_x,
+                                                              y: batch_y,
+                                                              keep_prob: 1.0})
+
+            print "Evaluation: loss: {:.6f} accuracy: {:.4f}".format(loss, acc)
+            confusion_matrix = cf.ConfusionMatrix(pr,
+                                                  batch_y)
+            confusion_matrix.print_to_console()
+            batch = test_set.next_batch()
+
