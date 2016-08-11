@@ -1,4 +1,4 @@
-from lipnet_dataset import DatasetPD, DatasetPDFeatures
+from lipnet_dataset import DatasetPD, DatasetPDFeatures, DatasetPDAugmented
 from lipnet_tf import train as lptf
 from lipnet_tf import FLAGS
 from lipnet_architecture import *
@@ -15,9 +15,9 @@ def train_on_images():
     path_to_img = dir + 'images/without_padding/'
     batch_size = 500
     FLAGS.batch_size = batch_size
-    epochs = 50
+    epochs = 10
     # create train set
-    train_set = DatasetPD(path_to_json.format(problem, problem, 'train'),
+    train_set = DatasetPDAugmented(path_to_json.format(problem, problem, 'train'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
                           num_epochs=epochs)
@@ -36,20 +36,6 @@ def train_on_images():
                         strides=[1, 1],
                         activation_function=ActivationFunctionEnum.Relu),
 
-        LayerDefinition(layer_type=LayerEnum.Convolutional,
-                        name='conv2',
-                        filter_size=[3, 3],
-                        filter_num=64,
-                        strides=[1, 1],
-                        activation_function=ActivationFunctionEnum.Relu),
-
-        LayerDefinition(layer_type=LayerEnum.Convolutional,
-                        name='conv3',
-                        filter_size=[3, 3],
-                        filter_num=64,
-                        strides=[1, 1],
-                        activation_function=ActivationFunctionEnum.Relu),
-
         LayerDefinition(layer_type=LayerEnum.PoolingMax,
                         name='pooling1',
                         pooling_size=[3, 3],
@@ -60,14 +46,7 @@ def train_on_images():
                         depth_radius=5),
 
         LayerDefinition(layer_type=LayerEnum.Convolutional,
-                        name='conv4',
-                        filter_size=[3, 3],
-                        filter_num=32,
-                        strides=[1, 1],
-                        activation_function=ActivationFunctionEnum.Relu),
-
-        LayerDefinition(layer_type=LayerEnum.Convolutional,
-                        name='conv5',
+                        name='conv2',
                         filter_size=[3, 3],
                         filter_num=32,
                         strides=[1, 1],

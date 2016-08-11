@@ -32,6 +32,9 @@ def evaluate(dataset):
 
         logits, predictions = model.get_predictions(images, batch_size, layer_definitions)
 
+        #threshold = tf.constant(0.25, dtype=tf.float32, name='threshold')
+        #raw_probabilities = tf.greater_equal(predictions, threshold, 'raw probabilities')
+
         loss = model.get_loss(logits, labels)
         accuracy = model.get_accuracy(predictions, labels)
 
@@ -68,6 +71,7 @@ def evaluate(dataset):
                                                            feed_dict={images: batch.images,
                                                                       labels: batch.labels,
                                                                       batch_size: batch.size})
+
                 dataset.set_predictions(batch.ids, pr)
                 result_accuracy += (acc * batch.size)
                 result_loss += (l * batch.size)

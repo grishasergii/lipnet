@@ -65,7 +65,7 @@ def train(train_set, validation_set, layer_definitions):
 
         # Build a Graph that trains the model with one batch of examples
         # and updates the model parameters
-        train_op = model.train(loss)
+        optimizer = tf.train.AdamOptimizer(learning_rate=0.1).minimize(loss)
 
         # Create a saver
         saver = tf.train.Saver(tf.all_variables())
@@ -84,13 +84,15 @@ def train(train_set, validation_set, layer_definitions):
         summary_writer = tf.train.SummaryWriter(FLAGS.log_train_dir, sess.graph)
         max_steps = 201
         format_str = '%s: step %d of %d: %s, loss = %.4f, accuracy = %.4f'
+        print 'Getting first batch...'
         batch = train_set.next_batch()
+        print 'Done'
         total_steps = train_set.num_steps
         step = 0
         while batch is not None:
             step += 1
             # perform training
-            _, loss_value, acc = sess.run([train_op, loss, accuracy], feed_dict={images: batch.images,
+            _, loss_value, acc = sess.run([optimizer, loss, accuracy], feed_dict={images: batch.images,
                                                                                  labels: batch.labels,
                                                                                  batch_size: batch.size})
             print format_str % (datetime.now(), step, total_steps, 'training', loss_value, acc)

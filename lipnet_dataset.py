@@ -9,7 +9,8 @@ import numpy as np
 import sys
 import math
 import confusion_matrix as cf
-
+from smote import smote
+import math
 
 class Batch:
     def __init__(self, data, labels, ids):
@@ -86,10 +87,10 @@ class DatasetPD(DatasetAbstract):
         self._image_width = image_width
         self._path_to_img = path_to_img
         self._batch_size = batch_size
-        self._create_chunks()
+        self._chunks = None
 
-        self.__prediction_columns = [c + '_prediction' for c in self._class_columns]
-        for col in self.__prediction_columns:
+        self._prediction_columns = [c + '_prediction' for c in self._class_columns]
+        for col in self._prediction_columns:
             self._df[col] = 0
 
     @property
@@ -114,14 +115,29 @@ class DatasetPD(DatasetAbstract):
         Yields a batch of data
         :return: batch
         """
+        if self._chunks is None:
+            self._create_chunks()
         try:
-            ids = self.__chunks.next()
+            ids = self._chunks.next()
         except StopIteration:
-            if self.__try_reset():
+            if self._try_reset():
                 return self.next_batch()
             else:
                 return None
         return self._get_batch(ids)
+
+    def _read_image(self, image_name):
+        """
+        Read image from self._path_to_img and perform any necessary preparation
+        :param image_name: string, image name, which is added to self._path_to_img
+        :return: numpy 2d array
+        """
+        filename = os.path.join(self._path_to_img, image_name)
+        img = io.imread(filename)
+        img = img_as_float(img)
+        img = resize(img, (self._image_width, self._image_height))
+        img = img.reshape((self._image_width, self._image_height, 1))
+        return img
 
     def _get_batch(self, ids):
         """
@@ -133,17 +149,12 @@ class DatasetPD(DatasetAbstract):
         images = np.empty([len(img_names), self._image_width, self._image_height, 1], dtype=float)
         i = 0
         for f in img_names:
-            filename = os.path.join(self._path_to_img, f)
-            img = io.imread(filename)
-            img = img_as_float(img)
-            img = resize(img, (self._image_width, self._image_height))
-            img = img.reshape((self._image_width, self._image_height, 1))
-            images[i] = img
+            images[i] = self._read_image(f)
             i += 1
         labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
         return Batch(images, labels, np.array(ids))
 
-    def __try_reset(self):
+    def _try_reset(self):
         """
         Resets chunks if epochs limit is not reached
         :return: boolean
@@ -161,7 +172,7 @@ class DatasetPD(DatasetAbstract):
         Resets epoch count and chunks generator
         :return: nothing
         """
-        for col in self.__prediction_columns:
+        for col in self._prediction_columns:
             self._df[col] = 0
         self._epoch_count = 0
         self._create_chunks()
@@ -177,18 +188,11 @@ class DatasetPD(DatasetAbstract):
     def _create_chunks(self):
         """
         Creates chunks
-        :return: nothing, result is written to self.__chunks
+        :return: nothing, result is written to self._chunks
         """
         list_of_ids = self._df['Id'].tolist()
         shuffle(list_of_ids)
-        self.__chunks = self.chunks(list_of_ids, self._batch_size)
-
-    def get_id_sorted_labels(self):
-        """
-        Returns labels sorted by example id
-        :return: numpy array
-        """
-        return self._df.sort(columns=['Id'])[self._class_columns].values
+        self._chunks = self.chunks(list_of_ids, self._batch_size)
 
     # DatasetAbstract methods
 
@@ -216,13 +220,13 @@ class DatasetPD(DatasetAbstract):
         """
         shape = predictions.shape
         assert len(shape) == 2, "Predictions must be a 2d array"
-        assert shape[1] == self.get_num_classes(), "Number of classes in daatset and in predictions must be the same"
+        assert shape[1] == self.get_num_classes(), "Number of classes in dataset and in predictions must be the same"
         assert ids.ndim == 1, "ids must be a vector"
         assert shape[0] == len(ids), "Number of ids and predictions must be the same"
-        self._df.loc[self._df.Id.isin(ids), self.__prediction_columns] = predictions
+        self._df.loc[self._df.Id.isin(ids), self._prediction_columns] = predictions
 
     def evaluate(self):
-        confusion_matrix = cf.ConfusionMatrix(self._df[self.__prediction_columns].values,
+        confusion_matrix = cf.ConfusionMatrix(self._df[self._prediction_columns].values,
                                               self._df[self._class_columns].values)
         confusion_matrix.print_to_console()
 
@@ -248,3 +252,145 @@ class DatasetPDFeatures(DatasetPD):
         data = np.concatenate((data, moments), axis=1)
         labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
         return Batch(data, labels, np.array(ids))
+
+"""
+
+Data augmentation, oversampling and undersampling is implemented in DatasetPDAugmented class
+All minority classes are augmented in the following way:
+- Examples are rotated 90, 180 and 270 degrees
+- Synthetic examples are generated using SMOTE technique
+- Random uniform noise is added to minority class examples
+
+Majority class is undersampled by excluding randomly selected examples on each training epoch.
+
+"""
+class DatasetPDAugmented(DatasetPD):
+
+    def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28,
+                 undersampling_rate=0.2):
+        super(DatasetPDAugmented, self).__init__(path_to_json, path_to_img, batch_size, num_epochs=num_epochs,
+                                                 image_width=image_width, image_height=image_height)
+
+        # dataframe to hold synthetic examples
+        self._df_synthetic = pd.DataFrame(columns=['Id', 'Image'] + self._class_columns + self._prediction_columns)
+
+        # determine majority and minority classes
+        class_counts = self._df['Class'].value_counts()
+        self._majority_class = class_counts.index[0]
+        self._minority_classes = class_counts.index[1:]
+
+        # undersampling rate tells how many randomly selected example of majority class are ignored on each epoch
+        self.undersampling_amount = int(math.ceil(undersampling_rate * class_counts[self._majority_class]))
+
+        # augment data
+        self._augment(self._minority_classes)
+
+        # generate synthetic examples
+        for c in self._minority_classes:
+            self._oversample(c, 2)
+        pass
+
+
+    def get_count(self):
+        real_count = super(DatasetPDAugmented, self).get_count()
+        synthetic_count = self._df_synthetic.shape[0]
+        return real_count + synthetic_count
+
+    def _augment(self, class_names):
+        """
+        Perform data augmentation
+        :param class_names: string or list of strings, name(s) of class to be augmented
+        :return: nothing, new examples as a result of augmentation are stored in self._df_synthetic
+        """
+        n = self._df['Id'][self._df['Class'].isin(class_names)].count() * 3
+        df = pd.DataFrame(index=np.arange(0, n), columns=self._df_synthetic.columns.values)
+        i = -1
+        for _, example in self._df[self._df['Class'].isin(class_names)].iterrows():
+            image = self._read_image(example.Image)
+            for j in xrange(3):
+                image = np.rot90(image)
+                i += 1
+                df.loc[i].Id = '{}_{}'.format(example.Id, j)
+                df.loc[i].Image = image
+                df.loc[i][self._class_columns] = example[self._class_columns]
+        self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
+
+    def _oversample(self, class_name, rate):
+        """
+        Oversample examples of a class
+        :param class_name: string, class name
+        :param rate: float, rate of oversampling, 1 corresponds to 100%
+        :return: nothing, generated examples are added to self._df_synthetic
+        """
+        n_examples = self._df['Id'][self._df['Class'].isin([class_name])].count()
+        labels = self._df[self._class_columns][self._df['Class'].isin([class_name])].values[0]
+        images = np.zeros((n_examples, self._image_height * self._image_width))
+        i = 0
+        for _, f in self._df.Image[self._df['Class'].isin([class_name])].iteritems():
+            img = self._read_image(f)
+            images[i] = img.flatten()
+            i += 1
+
+        n = math.ceil(n_examples * rate)
+        n = int(n)
+        synthetic_examples = smote(images, n, n_neighbours=5)
+        df = pd.DataFrame(index=np.arange(0, n), columns=self._df_synthetic.columns.values)
+
+        for i, img in enumerate(synthetic_examples):
+            df.loc[i].Id = 's_{}_{}'.format(class_name, i)
+            df.loc[i].Image = img.reshape((self._image_height, self._image_width))
+            df.loc[i][self._class_columns] = labels
+
+        self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
+
+    def _create_chunks(self):
+        list_of_ids = self._df.Id[self._df.Class.isin([self._majority_class])].tolist()
+        shuffle(list_of_ids)
+        for _ in xrange(0, self.undersampling_amount):
+            list_of_ids.pop()
+
+        list_of_ids += self._df.Id[self._df.Class.isin(self._minority_classes)].tolist()
+
+        list_of_ids += self._df_synthetic['Id'].tolist()
+        shuffle(list_of_ids)
+        self._chunks = self.chunks(list_of_ids, self._batch_size)
+
+    def _get_batch(self, ids):
+        """
+        Creates a batch from example ids
+        :param ids: list of int, ids of examples
+        :return: an instance of Batch class
+        """
+
+        examples = self._df[['Image', 'Id']][self._df['Id'].isin(ids)]
+        images_real = np.empty([examples.shape[0], self._image_width, self._image_height, 1], dtype=float)
+        ids_real = np.empty(examples.shape[0])
+        i = 0
+        for _, example in examples.iterrows():
+            images_real[i] = self._read_image(example.Image)
+            ids_real[i] = example.Id
+            i += 1
+
+        examples = self._df_synthetic[['Image', 'Id']][self._df_synthetic['Id'].isin(ids)]
+        images_synthetic = np.empty([examples.shape[0], self._image_width, self._image_height, 1], dtype=float)
+        i = 0
+        for _, example in examples.iterrows():
+            images_synthetic[i] = np.reshape(example.Image, (self._image_width, self._image_height, 1))
+            i += 1
+
+        ids_synthetic = self._df_synthetic.Id[self._df_synthetic.Id.isin(ids)].values
+
+        labels_real = self._df[self._class_columns][self._df['Id'].isin(ids)].values
+        labels_synthetic = self._df_synthetic[self._class_columns][self._df_synthetic.Id.isin(ids)].values
+        return Batch(np.concatenate((images_real, images_synthetic), axis=0),
+                     np.concatenate((labels_real, labels_synthetic), axis=0),
+                     np.concatenate((ids_real, ids_synthetic), axis=0))
+
+    def set_predictions(self, ids, predictions):
+        super(DatasetPDAugmented, self).set_predictions(ids, predictions)
+        self._df_synthetic.loc[self._df_synthetic.Id.isin(ids), self._prediction_columns] = predictions
+
+    def evaluate(self):
+        confusion_matrix = cf.ConfusionMatrix(self._df[self._prediction_columns].values + self._df_synthetic[self._prediction_columns].values,
+                                              self._df[self._class_columns].values + self._df_synthetic[self._class_columns].values)
+        confusion_matrix.print_to_console()
