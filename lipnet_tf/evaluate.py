@@ -23,7 +23,7 @@ def evaluate(dataset, model, do_restore=True):
                                                          feed_dict={model.x: batch_x,
                                                                     model.y: batch_y,
                                                                     model.keep_prob: 1.0})
-            print "Evaluating: loss: {:.6f} accuracy: {:.4f}".format(batch_loss, batch_acc)
+            #print "Evaluating: loss: {:.6f} accuracy: {:.4f}".format(batch_loss, batch_acc)
             dataset.set_predictions(batch.ids, batch_pred)
             loss += batch_loss * batch.size
             acc += batch_acc * batch.size
@@ -33,5 +33,5 @@ def evaluate(dataset, model, do_restore=True):
         loss /= examples_count
         acc /= examples_count
 
-        print 'Total loss: {:.4f} accuracy: {:.4f}'.format(loss, acc)
+        print 'Evaluating: total loss: {:.4f} accuracy: {:.4f}'.format(loss, acc)
         dataset.evaluate()

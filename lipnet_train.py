@@ -18,19 +18,19 @@ def train_on_images():
     FLAGS.batch_size = batch_size
     epochs = 100
     # create train set
-    train_set = DatasetPD(path_to_json.format(problem, problem, 'test'),
+    train_set = DatasetPDAugmented(path_to_json.format(problem, problem, 'train'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
                           num_epochs=epochs)
 
+    validation_set = DatasetPD(path_to_json.format(problem, problem, 'validation'),
+                          path_to_img.format(problem),
+                          batch_size=batch_size,
+                          num_epochs=1)
+
     model = Model(3, la.layer_definitions)
-    lptf.train(train_set, model)
-    """
-    lptf.train_simple(train_set,
-                      la.layer_definitions,
-                      do_train=False,
-                      do_evaluate=True)
-    """
+    lptf.train(train_set, model, validation_set)
+
 
 def main(argv=None):
     #train_on_features()

@@ -3,6 +3,7 @@ import tensorflow as tf
 import model
 import os.path
 from . import FLAGS
+from evaluate import evaluate
 
 
 def _prepare_dir(directory):
@@ -16,7 +17,7 @@ def _prepare_dir(directory):
     tf.gfile.MakeDirs(directory)
 
 
-def train(dataset, model):
+def train(dataset, model, validation_set=None):
     step = 0
     total_steps = dataset.num_steps
     with tf.Session() as sess:
@@ -32,10 +33,16 @@ def train(dataset, model):
                                                  model.keep_prob: model.dropout})
 
             if step % 10 == 0:
-                loss, acc = sess.run([model.cost, model.accuracy], feed_dict={model.x: batch_x,
-                                                                              model.y: batch_y,
-                                                                              model.keep_prob: 1.0})
-                print "Training: step: {} of {} loss: {:.6f} accuracy: {:.4f}".format(step, total_steps, loss, acc)
+                if validation_set is None:
+                    loss, acc = sess.run([model.cost, model.accuracy], feed_dict={model.x: batch_x,
+                                                                                  model.y: batch_y,
+                                                                                  model.keep_prob: 1.0})
+                    print "Training: step: {} of {} loss: {:.6f} accuracy: {:.4f}".format(step, total_steps, loss, acc)
+                else:
+                    checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+                    model.saver.save(sess, checkpoint_path, global_step=step)
+                    evaluate(validation_set, model, do_restore=True)
+                    validation_set.reset()
 
             if step % 100 == 0:
                 checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')

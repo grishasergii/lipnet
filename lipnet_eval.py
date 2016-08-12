@@ -14,7 +14,7 @@ def main(argv=None):
     FLAGS.batch_size = batch_size
     epochs = 1
     # create dataset
-    dataset = DatasetPD(path_to_json.format(problem, problem, 'test'),
+    dataset = DatasetPD(path_to_json.format(problem, problem, 'validation'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
                           num_epochs=epochs)

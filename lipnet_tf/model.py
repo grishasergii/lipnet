@@ -14,7 +14,7 @@ class Model(object):
         with tf.name_scope('Input'):
             self.x = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='Images')
             self.y = tf.placeholder(tf.float32, [None, num_classes], name='Labels')
-        self.keep_prob = tf.placeholder(tf.float32)
+        self.keep_prob = tf.placeholder(tf.float32, name='Keep_probability')
 
         logits = self._get_logits(layer_definition)
         self.predictions = tf.nn.softmax(logits)
