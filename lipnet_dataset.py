@@ -100,7 +100,7 @@ class DatasetPD(DatasetAbstract):
     def num_steps(self):
         if self.num_epochs is None:
             return sys.maxint
-        return self.num_epochs * math.ceil(self.get_count() / self._batch_size)
+        return int(self.num_epochs * math.ceil(self.get_count() / self._batch_size))
 
     def chunks(self, items, chunk_size):
         """
@@ -293,6 +293,11 @@ class DatasetPDAugmented(DatasetPD):
             self._oversample(c, 2)
         pass
 
+    @property
+    def num_steps(self):
+        if self.num_epochs is None:
+            return sys.maxint
+        return int(self.num_epochs * math.ceil((self.get_count() - self.undersampling_amount) / self._batch_size))
 
     def get_count(self):
         real_count = super(DatasetPDAugmented, self).get_count()

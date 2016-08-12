@@ -136,11 +136,11 @@ class LayerConv2d(LayerAbstract):
         :param stride: int
         :return: tensor
         """
-        channels = x.get_shape()[3]
+        channels = x.get_shape()[3].value
         weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]))
         biases = tf.Variable(tf.random_normal([filter_num]))
         conv2d = tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding='SAME')
-        conv2d = tf.nn.bias_add(x, biases)
+        conv2d = tf.nn.bias_add(conv2d, biases)
         return tf.nn.relu(conv2d)
 
 
@@ -160,8 +160,8 @@ class LayerFullyConnected(LayerAbstract):
 
         # reshape tensor x to make it 2d, 1 row per example
         n = 1
-        for s in shape:
-            n *= s
+        for s in shape[1:]:
+            n *= s.value
         out = tf.reshape(x, tf.pack([-1, n]))
         out.set_shape([None, n])
         return out
@@ -198,11 +198,12 @@ class LayerFullyConnected(LayerAbstract):
         :return: tensor
         """
         x = cls._prepare_input_tensor(x)
-        n = x.get_shape()[1]
+        n = x.get_shape()[1].value
         weights = tf.Variable(tf.random_normal([n, nodes]))
         biases = tf.Variable(tf.random_normal([nodes]))
         fc = cls._get_output(x, weights, biases, activation_function, keep_prob)
         return fc
+
 
 class LayerOutput(LayerFullyConnected):
 

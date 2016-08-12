@@ -115,74 +115,25 @@ def maxpool2d(x, k=2):
     return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
 
 
-def conv_net(x, layer_definitions, dropout):
+def conv_net(x, layer_definitions, keep_prob):
 
     layer = x
     last_filter_num = 1
     for ld in layer_definitions:
         if ld.layer_type == LayerEnum.Convolutional:
-            weights = tf.Variable(tf.random_normal(ld.filter_size + [last_filter_num, ld.filter_num]))
-            last_filter_num = ld.filter_num
-            biases = tf.Variable(tf.random_normal([ld.filter_num]))
-            layer = conv2d(layer, weights, biases)
+            layer = LayerConv2d.apply(layer, ld.filter_size, ld.filter_num, ld. stride)
         elif ld.layer_type == LayerEnum.PoolingMax:
-            layer = maxpool2d(layer, ld.pooling_size[0])
+            layer = LayerMaxPool.apply(layer, ld.pooling_size, ld.stride)
         elif ld.layer_type == LayerEnum.FullyConnected:
-            shape = layer.get_shape()
-            if shape.ndims == 4:
-                n = shape[1] * shape[2] * shape[3]
-                layer = tf.reshape(layer, tf.pack([-1, n]))
-                layer.set_shape([None, n])
-            n = layer.get_shape()[1].value
-            weights = tf.Variable(tf.random_normal([n, ld.fc_nodes]))
-            biases = tf.Variable(tf.random_normal([ld.fc_nodes]))
-            layer = tf.add(tf.matmul(layer, weights), biases)
             act = {
                 ActivationFunctionEnum.Relu: tf.nn.relu,
                 ActivationFunctionEnum.Sigmoid: tf.nn.sigmoid,
                 ActivationFunctionEnum.Softmax: tf.nn.softmax
             }[ld.activation_function]
-            layer = act(layer)
-            layer = tf.nn.dropout(layer, dropout)
+            layer = LayerFullyConnected.apply(layer, ld.fc_nodes, act, keep_prob)
         elif ld.layer_type == LayerEnum.Output:
-            shape = layer.get_shape()
-            if shape.ndims == 4:
-                n = shape[1] * shape[2] * shape[3]
-                layer = tf.reshape(layer, tf.pack([-1, n]))
-                layer.set_shape([None, n])
-            n = layer.get_shape()[1].value
-            weights = tf.Variable(tf.random_normal([n, ld.fc_nodes]))
-            biases = tf.Variable(tf.random_normal([ld.fc_nodes]))
-            layer = tf.add(tf.matmul(layer, weights), biases)
+            layer = LayerOutput.apply(layer, ld.fc_nodes)
 
-    """
-    weights = {
-        'wc1': tf.Variable(tf.random_normal([4, 4, 1, 32])),
-        'wc2': tf.Variable(tf.random_normal([4, 4, 32, 64])),
-        'wd1': tf.Variable(tf.random_normal([7*7*64, 1024])),
-        'out': tf.Variable(tf.random_normal([1024, 3]))
-    }
-
-    biases = {
-        'bc1': tf.Variable(tf.random_normal([32])),
-        'bc2': tf.Variable(tf.random_normal([64])),
-        'bd1': tf.Variable(tf.random_normal([1024])),
-        'out': tf.Variable(tf.random_normal([3])),
-    }
-
-    conv1 = conv2d(x, weights['wc1'], biases['bc1'])
-    conv1 = maxpool2d(conv1, k=2)
-
-    conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
-    conv2 = maxpool2d(conv2, k=2)
-
-    fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
-    fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
-    fc1 = tf.nn.relu(fc1)
-    fc1 = tf.nn.dropout(fc1, dropout)
-
-    out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
-    """
     out = layer
     return out
 
