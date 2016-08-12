@@ -1,5 +1,6 @@
 from lipnet_dataset import DatasetPD, DatasetPDFeatures, DatasetPDAugmented
 from lipnet_tf import train as lptf
+from lipnet_tf.model import Model
 from lipnet_tf import FLAGS
 import lipnet_architecture as la
 
@@ -22,7 +23,7 @@ def train_on_images():
                           batch_size=batch_size,
                           num_epochs=epochs)
 
-    model = lptf.Model(3, la.layer_definitions)
+    model = Model(3, la.layer_definitions)
     lptf.train(train_set, model)
     """
     lptf.train_simple(train_set,

@@ -1,147 +1,57 @@
 import tensorflow as tf
 from layer import *
 from lipnet_architecture import *
+from . import FLAGS
 
 
-def _log_loss(y, p):
-    """
-    Multi class log loss
-    :param y: tensor, represents true classes
-    :param p: tensor, represent predictions
-    :return: scalar
-    """
-    return - tf.reduce_mean(tf.mul(y, tf.log(p)))
+class Model(object):
 
+    def __init__(self, num_classes, layer_definition):
+        self.learning_rate = 0.01
+        self.dropout = 0.75
 
-def _loss_summary(x):
-    """
-    Add summaries for losses
-    :param x: total loss from get_loss()
-    :return:
-    """
+        # tf Graph input
+        with tf.name_scope('Input'):
+            self.x = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='Images')
+            self.y = tf.placeholder(tf.float32, [None, num_classes], name='Labels')
+        self.keep_prob = tf.placeholder(tf.float32)
 
-def _get_layer_from_definition(layer_definition):
-    """
-    Transforms layer definition to layer object
-    :param layer_definition: LayerDefinition named tuple
-    :return: Layer* object
-    """
-    act = None
-    if layer_definition.activation_function is not None:
-        act = {
-            ActivationFunctionEnum.Relu: tf.nn.relu,
-            ActivationFunctionEnum.Sigmoid: tf.nn.sigmoid,
-            ActivationFunctionEnum.Softmax: tf.nn.softmax
-        }[layer_definition.activation_function]
+        logits = self._get_logits(layer_definition)
+        self.predictions = tf.nn.softmax(logits)
 
-    if layer_definition.layer_type == LayerEnum.Convolutional:
-        return LayerConvolutional(layer_definition.name,
-                                   layer_definition.filter_size,
-                                   layer_definition.filter_num,
-                                   layer_definition.strides,
-                                   act)
-    elif layer_definition.layer_type == LayerEnum.FullyConnected:
-        return LayerFullyConnected(layer_definition.name,
-                                    layer_definition.fc_nodes,
-                                    act,
-                                    layer_definition.return_preactivations)
-    elif layer_definition.layer_type == LayerEnum.PoolingMax:
-        return LayerPooling(layer_definition.name,
-                             layer_definition.pooling_size,
-                             layer_definition.strides)
-    elif layer_definition.layer_type == LayerEnum.Normalization:
-        return LayerNormalization(layer_definition.name, layer_definition.depth_radius)
+        # accuracy
+        one_hot_pred = tf.argmax(logits, 1)
+        correct_pred = tf.equal(one_hot_pred, tf.argmax(self.y, 1))
+        self.accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
-    return None
+        # cost function
+        self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, self.y))
 
-def get_predictions(images, layer_definitions):
-    """
-    Build the lipnet model, feed images and get predictions of classes
-    :param images: images to classify
-    :return: predictions (logits)
-    """
-    # Instantiate all variables using tf.get_variable() instead of tf.Variable()
-    # if you want to train lipnet on multiple GPU.
+        # optimizer
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
 
-    layers = []
-    for ld in layer_definitions:
-        layers.append(_get_layer_from_definition(ld))
+        self.init = tf.initialize_all_variables()
+        self.saver = tf.train.Saver()
 
-    input_tensor = images
-    for layer in layers[:-1]:
-        input_tensor = layer.process(input_tensor)
+    def _get_logits(self, layer_definitions):
+        layer = self.x
+        for ld in layer_definitions:
+            if ld.layer_type == LayerEnum.Convolutional:
+                layer = LayerConv2d.apply(layer, ld.filter_size, ld.filter_num, ld. stride)
+            elif ld.layer_type == LayerEnum.PoolingMax:
+                layer = LayerMaxPool.apply(layer, ld.pooling_size, ld.stride)
+            elif ld.layer_type == LayerEnum.FullyConnected:
+                act = {
+                    ActivationFunctionEnum.Relu: tf.nn.relu,
+                    ActivationFunctionEnum.Sigmoid: tf.nn.sigmoid,
+                    ActivationFunctionEnum.Softmax: tf.nn.softmax
+                }[ld.activation_function]
+                layer = LayerFullyConnected.apply(layer, ld.fc_nodes, act, self.keep_prob)
+            elif ld.layer_type == LayerEnum.Output:
+                layer = LayerOutput.apply(layer, ld.fc_nodes)
 
-    logits, softmax = layers[-1].process(input_tensor)
-
-    return logits, softmax
-
-
-def get_loss(predictions, labels):
-    """
-    Calculate loss
-    :param predictions: tensor
-    :param labels: tensor
-    :return: tensor
-    """
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(predictions, labels,
-                                                                   name='cross_entropy_per_example')
-
-    loss = tf.reduce_mean(cross_entropy, name='cross_entropy')
-    #loss = _log_loss(labels, predictions)
-    return loss
-    #tf.add_to_collection('losses', loss)
-    #return tf.add_n(tf.get_collection('losses'), name='total_loss')
-
-
-def get_accuracy(predictions, labels):
-    """
-    Returns accuracy - fraction of correct predictions
-    :param predictions: tensor, predicted probabilities
-    :param labels: tensor, one-hot encoded labels
-    :return: scalar
-    """
-    correct_prediction = tf.equal(tf.arg_max(predictions, 1), tf.arg_max(labels, 1))
-    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-    return accuracy
-
-
-def conv2d(x, W, b, strides=1):
-    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
-    x = tf.nn.bias_add(x, b)
-    return tf.nn.relu(x)
-
-
-def maxpool2d(x, k=2):
-    return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
-
-
-def conv_net(x, layer_definitions, keep_prob):
-
-    layer = x
-    last_filter_num = 1
-    for ld in layer_definitions:
-        if ld.layer_type == LayerEnum.Convolutional:
-            layer = LayerConv2d.apply(layer, ld.filter_size, ld.filter_num, ld. stride)
-        elif ld.layer_type == LayerEnum.PoolingMax:
-            layer = LayerMaxPool.apply(layer, ld.pooling_size, ld.stride)
-        elif ld.layer_type == LayerEnum.FullyConnected:
-            act = {
-                ActivationFunctionEnum.Relu: tf.nn.relu,
-                ActivationFunctionEnum.Sigmoid: tf.nn.sigmoid,
-                ActivationFunctionEnum.Softmax: tf.nn.softmax
-            }[ld.activation_function]
-            layer = LayerFullyConnected.apply(layer, ld.fc_nodes, act, keep_prob)
-        elif ld.layer_type == LayerEnum.Output:
-            layer = LayerOutput.apply(layer, ld.fc_nodes)
-
-    out = layer
-    return out
-
-
-
-
-
-
+        out = layer
+        return out
 
 
 

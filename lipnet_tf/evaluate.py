@@ -1,104 +1,37 @@
 from __future__ import division
 import tensorflow as tf
 from . import FLAGS
-import model
-import os
-from datetime import datetime
-import numpy as np
-import pickle
 
 
-def evaluate(dataset):
-    """
-
-    :param dataset:
-    :param path_to_images:
-    :param batch_size:
-    :return:
-    """
-    if tf.gfile.Exists(FLAGS.log_eval_dir):
-        tf.gfile.DeleteRecursively(FLAGS.log_eval_dir)
-    tf.gfile.MakeDirs(FLAGS.log_eval_dir)
-
-    layer_def_path = os.path.join(FLAGS.checkpoint_dir, 'layer_definitions.pickle')
-    with open(layer_def_path, 'rb') as handle:
-        layer_definitions = pickle.load(handle)
-
-    with tf.Graph().as_default() as g:
-        images = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='images_input')
-        #images = tf.placeholder(tf.float32, [None, 11], name='images_input')
-        labels = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='labels_input')
-        batch_size = tf.placeholder(tf.int32, name='batch_size')
-
-        logits, predictions = model.get_predictions(images, batch_size, layer_definitions)
-
-        #threshold = tf.constant(0.25, dtype=tf.float32, name='threshold')
-        #raw_probabilities = tf.greater_equal(predictions, threshold, 'raw probabilities')
-
-        loss = model.get_loss(logits, labels)
-        accuracy = model.get_accuracy(predictions, labels)
-
-        saver = tf.train.Saver()
-
-        summary_op = tf.merge_all_summaries()
-        summary_writer = tf.train.SummaryWriter(FLAGS.log_eval_dir)
-
-        # create empty array for generated predictions
-        predictions_output = None
-
-        #evaluate_once(dataset, saver, summary_writer, loss, accuracy, summary_op, dataset.get_count(), batch_size_op, images, labels, batch_size, predictions)
-        with tf.Session() as sess:
+def evaluate(dataset, model, do_restore=True):
+    with tf.Session() as sess:
+        if do_restore:
             checkpoint = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
             if checkpoint and checkpoint.model_checkpoint_path:
-                # Restore from checkpoint
-                print 'Restoring from {}'.format(checkpoint.model_checkpoint_path)
-                saver.restore(sess, checkpoint.model_checkpoint_path)
-                # Assuming model_checkpoint_path looks something like:
-                #   /output/model.ckpt-0,
-                # extract global_step from it.
-                global_step = checkpoint.model_checkpoint_path.split('/')[-1].split('-')[-1]
+                model.saver.restore(sess, checkpoint.model_checkpoint_path)
+                print 'Model has been restored from {}'.format(checkpoint.model_checkpoint_path)
             else:
-                print 'No checkpoint file found'
-                return
-
-            result_accuracy = 0
-            result_loss = 0
-            step = 0
+                print 'Warning: no checkpoint found'
+        loss = 0
+        acc = 0
+        examples_count = 0
+        batch = dataset.next_batch()
+        while batch is not None:
+            batch_x = batch.images
+            batch_y = batch.labels
+            batch_loss, batch_acc, batch_pred = sess.run([model.cost, model.accuracy, model.predictions],
+                                                         feed_dict={model.x: batch_x,
+                                                                    model.y: batch_y,
+                                                                    model.keep_prob: 1.0})
+            print "Evaluating: loss: {:.6f} accuracy: {:.4f}".format(batch_loss, batch_acc)
+            dataset.set_predictions(batch.ids, batch_pred)
+            loss += batch_loss * batch.size
+            acc += batch_acc * batch.size
+            examples_count += batch.size
             batch = dataset.next_batch()
-            while batch is not None:
-                FLAGS.batch_size = batch.size
-                acc, l, pr = sess.run([accuracy, loss, predictions],
-                                                           feed_dict={images: batch.images,
-                                                                      labels: batch.labels,
-                                                                      batch_size: batch.size})
 
-                dataset.set_predictions(batch.ids, pr)
-                result_accuracy += (acc * batch.size)
-                result_loss += (l * batch.size)
-                step += 1
-                print "%s: evaluating batch %d of size %d" % (datetime.now(), step, batch.size)
-                batch = dataset.next_batch()
+        loss /= examples_count
+        acc /= examples_count
 
-            result_loss /= dataset.get_count()
-            result_accuracy /= dataset.get_count()
-
-            print "%s: accuracy = %.4f loss = %.4f examples = %d" % (datetime.now(), result_accuracy, result_loss, dataset.get_count())
-
-            summary = tf.Summary()
-            #summary.ParseFromString(sess.run(summary_op, feed_dict={images: [],
-            #                                                        labels: []}))
-            summary.value.add(tag='Accuracy', simple_value=result_accuracy)
-            summary.value.add(tag='Loss', simple_value=result_loss)
-            summary_writer.add_summary(summary, global_step)
-
-            # sort predictions by id (first column)
-            dataset.evaluate()
-            return
-
-
-def main(argv=None):
-    evaluate()
-
-
-if __name__ == '__main__':
-    tf.app.run()
+        print 'Total loss: {:.4f} accuracy: {:.4f}'.format(loss, acc)
+        dataset.evaluate()
