@@ -5,7 +5,7 @@ class LayerEnum(object):
     """
     Enumeration that represents layer types
     """
-    Convolutional, FullyConnected, PoolingMax, Normalization = range(4)
+    Convolutional, FullyConnected, PoolingMax, Normalization, Output = range(5)
 
 
 class ActivationFunctionEnum(object):
@@ -20,7 +20,7 @@ LayerDefinition = collections.namedtuple('LayerDefinition',
                                          'name,'
                                          'filter_size,'
                                          'filter_num,'
-                                         'strides,'
+                                         'stride,'
                                          'activation_function,'
                                          'pooling_size,'
                                          'depth_radius,'

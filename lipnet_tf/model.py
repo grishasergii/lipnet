@@ -20,7 +20,7 @@ def _loss_summary(x):
     :return:
     """
 
-def _get_layer_from_definition(layer_definition, batch_size):
+def _get_layer_from_definition(layer_definition):
     """
     Transforms layer definition to layer object
     :param layer_definition: LayerDefinition named tuple
@@ -43,7 +43,6 @@ def _get_layer_from_definition(layer_definition, batch_size):
     elif layer_definition.layer_type == LayerEnum.FullyConnected:
         return LayerFullyConnected(layer_definition.name,
                                     layer_definition.fc_nodes,
-                                    batch_size,
                                     act,
                                     layer_definition.return_preactivations)
     elif layer_definition.layer_type == LayerEnum.PoolingMax:
@@ -55,7 +54,7 @@ def _get_layer_from_definition(layer_definition, batch_size):
 
     return None
 
-def get_predictions(images, batch_size, layer_definitions):
+def get_predictions(images, layer_definitions):
     """
     Build the lipnet model, feed images and get predictions of classes
     :param images: images to classify
@@ -66,7 +65,7 @@ def get_predictions(images, batch_size, layer_definitions):
 
     layers = []
     for ld in layer_definitions:
-        layers.append(_get_layer_from_definition(ld, batch_size))
+        layers.append(_get_layer_from_definition(ld))
 
     input_tensor = images
     for layer in layers[:-1]:
@@ -106,42 +105,88 @@ def get_accuracy(predictions, labels):
     return accuracy
 
 
-def get_batch_size(images, labels):
-    """
-    Returns number of examples in a batch
-    :param images: tensor
-    :param labels: tensor
-    :return: scalar
-    """
-    num_images = tf.shape(images)[0]
-    num_labels = tf.shape(labels)[0]
-    #assert num_images == num_labels, 'Number of images and corresponding labels must be the same'
-    return num_images
+def conv2d(x, W, b, strides=1):
+    x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
+    x = tf.nn.bias_add(x, b)
+    return tf.nn.relu(x)
 
 
-def train(total_loss):
-    """
+def maxpool2d(x, k=2):
+    return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
 
-    :param total_loss:
-    :param global_step:
-    :return:
-    """
 
-    lr = 0.1
-    train_op = tf.train.AdamOptimizer(learning_rate=lr).minimize(total_loss)
-    #train_op = tf.train.GradientDescentOptimizer(learning_rate=0.1).minimize(total_loss)
-    """
-    with tf.control_dependencies([total_loss]):
-        opt = tf.train.AdamOptimizer(learning_rate=lr)
-        grads = opt.compute_gradients(total_loss)
+def conv_net(x, layer_definitions, dropout):
 
-    # apply gradients
-    apply_gradient_op = opt.apply_gradients(grads, global_step=global_step)
+    layer = x
+    last_filter_num = 1
+    for ld in layer_definitions:
+        if ld.layer_type == LayerEnum.Convolutional:
+            weights = tf.Variable(tf.random_normal(ld.filter_size + [last_filter_num, ld.filter_num]))
+            last_filter_num = ld.filter_num
+            biases = tf.Variable(tf.random_normal([ld.filter_num]))
+            layer = conv2d(layer, weights, biases)
+        elif ld.layer_type == LayerEnum.PoolingMax:
+            layer = maxpool2d(layer, ld.pooling_size[0])
+        elif ld.layer_type == LayerEnum.FullyConnected:
+            shape = layer.get_shape()
+            if shape.ndims == 4:
+                n = shape[1] * shape[2] * shape[3]
+                layer = tf.reshape(layer, tf.pack([-1, n]))
+                layer.set_shape([None, n])
+            n = layer.get_shape()[1].value
+            weights = tf.Variable(tf.random_normal([n, ld.fc_nodes]))
+            biases = tf.Variable(tf.random_normal([ld.fc_nodes]))
+            layer = tf.add(tf.matmul(layer, weights), biases)
+            act = {
+                ActivationFunctionEnum.Relu: tf.nn.relu,
+                ActivationFunctionEnum.Sigmoid: tf.nn.sigmoid,
+                ActivationFunctionEnum.Softmax: tf.nn.softmax
+            }[ld.activation_function]
+            layer = act(layer)
+            layer = tf.nn.dropout(layer, dropout)
+        elif ld.layer_type == LayerEnum.Output:
+            shape = layer.get_shape()
+            if shape.ndims == 4:
+                n = shape[1] * shape[2] * shape[3]
+                layer = tf.reshape(layer, tf.pack([-1, n]))
+                layer.set_shape([None, n])
+            n = layer.get_shape()[1].value
+            weights = tf.Variable(tf.random_normal([n, ld.fc_nodes]))
+            biases = tf.Variable(tf.random_normal([ld.fc_nodes]))
+            layer = tf.add(tf.matmul(layer, weights), biases)
 
-    with tf.control_dependencies([apply_gradient_op]):
-        train_op = tf.no_op(name='train')
     """
-    return train_op
+    weights = {
+        'wc1': tf.Variable(tf.random_normal([4, 4, 1, 32])),
+        'wc2': tf.Variable(tf.random_normal([4, 4, 32, 64])),
+        'wd1': tf.Variable(tf.random_normal([7*7*64, 1024])),
+        'out': tf.Variable(tf.random_normal([1024, 3]))
+    }
+
+    biases = {
+        'bc1': tf.Variable(tf.random_normal([32])),
+        'bc2': tf.Variable(tf.random_normal([64])),
+        'bd1': tf.Variable(tf.random_normal([1024])),
+        'out': tf.Variable(tf.random_normal([3])),
+    }
+
+    conv1 = conv2d(x, weights['wc1'], biases['bc1'])
+    conv1 = maxpool2d(conv1, k=2)
+
+    conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
+    conv2 = maxpool2d(conv2, k=2)
+
+    fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
+    fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
+    fc1 = tf.nn.relu(fc1)
+    fc1 = tf.nn.dropout(fc1, dropout)
+
+    out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
+    """
+    out = layer
+    return out
+
+
 
 
 

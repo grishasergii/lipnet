@@ -13,11 +13,11 @@ def train_on_images():
     dir = '/home/sergii/Documents/microscopic_data/{}/'
     path_to_json = dir + '{}_{}_set.json'
     path_to_img = dir + 'images/without_padding/'
-    batch_size = 10
+    batch_size = 500
     FLAGS.batch_size = batch_size
     epochs = 1
     # create train set
-    train_set = DatasetPD(path_to_json.format(problem, problem, 'train'),
+    train_set = DatasetPD(path_to_json.format(problem, problem, 'test'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
                           num_epochs=epochs)
@@ -31,64 +31,64 @@ def train_on_images():
     layer_definitions = [
         LayerDefinition(layer_type=LayerEnum.Convolutional,
                         name='conv1',
-                        filter_size=[3, 3],
-                        filter_num=64,
-                        strides=[1, 1],
-                        activation_function=ActivationFunctionEnum.Relu),
-
-        LayerDefinition(layer_type=LayerEnum.PoolingMax,
-                        name='pooling1',
-                        pooling_size=[3, 3],
-                        strides=[2, 2]),
-
-        LayerDefinition(layer_type=LayerEnum.Normalization,
-                        name='norm1',
-                        depth_radius=5),
-
-        LayerDefinition(layer_type=LayerEnum.Convolutional,
-                        name='conv2',
-                        filter_size=[3, 3],
+                        filter_size=[4, 4],
                         filter_num=32,
                         strides=[1, 1],
                         activation_function=ActivationFunctionEnum.Relu),
 
         LayerDefinition(layer_type=LayerEnum.PoolingMax,
-                        name='pooling2',
-                        pooling_size=[3, 3],
+                        name='pooling1',
+                        pooling_size=[2, 2],
                         strides=[2, 2]),
 
-        LayerDefinition(layer_type=LayerEnum.Normalization,
-                        name='norm2',
-                        depth_radius=5),
+        # LayerDefinition(layer_type=LayerEnum.Normalization,
+        #                name='norm1',
+        #                depth_radius=5),
+
+        LayerDefinition(layer_type=LayerEnum.Convolutional,
+                        name='conv2',
+                        filter_size=[4, 4],
+                        filter_num=64,
+                        strides=[1, 1],
+                        activation_function=ActivationFunctionEnum.Relu),
+
+        LayerDefinition(layer_type=LayerEnum.Convolutional,
+                        name='conv3',
+                        filter_size=[4, 4],
+                        filter_num=64,
+                        strides=[1, 1],
+                        activation_function=ActivationFunctionEnum.Relu),
+
+        LayerDefinition(layer_type=LayerEnum.PoolingMax,
+                        name='pooling3',
+                        pooling_size=[2, 2],
+                        strides=[2, 2]),
 
         LayerDefinition(layer_type=LayerEnum.FullyConnected,
                         name='fc1',
-                        fc_nodes=384,
+                        fc_nodes=1024,
                         activation_function=ActivationFunctionEnum.Relu,
                         return_preactivations=False),
 
-        LayerDefinition(layer_type=LayerEnum.FullyConnected,
-                        name='fc2',
-                        fc_nodes=192,
-                        activation_function=ActivationFunctionEnum.Relu,
-                        return_preactivations=False),
-
-        LayerDefinition(layer_type=LayerEnum.FullyConnected,
+        LayerDefinition(layer_type=LayerEnum.Output,
                         name='softmax_linear',
                         fc_nodes=train_set.get_num_classes(),
                         activation_function=ActivationFunctionEnum.Softmax,
                         return_preactivations=True),
-
     ]
 
     # start training
-    """
-    lptf.train(train_set,
-                None,
-                layer_definitions)
-    """
-    lptf.train_simple(train_set,
-                      validation_set)
+    #lptf.train(train_set,
+    #            None,
+    #            layer_definitions)
+    for _ in xrange(20):
+        train_set = DatasetPD(path_to_json.format(problem, problem, 'test'),
+                              path_to_img.format(problem),
+                              batch_size=batch_size,
+                              num_epochs=epochs)
+        lptf.train_simple(train_set,
+                          validation_set,
+                          layer_definitions)
 
 
 def train_on_features():

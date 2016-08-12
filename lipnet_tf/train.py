@@ -56,7 +56,7 @@ def train(train_set, validation_set, layer_definitions):
 
         # Build a graph that computes the logits predictions.
         # predictions - predicted probabilities of belonging to all classes
-        logits, predictions = model.get_predictions(images, batch_size, layer_definitions)
+        logits, predictions = model.get_predictions(images, layer_definitions)
 
         # calculate loss
         loss = model.get_loss(logits, labels)
@@ -102,7 +102,7 @@ def train(train_set, validation_set, layer_definitions):
                                                           labels: batch.labels,
                                                           batch_size: batch.size})
             summary_writer.add_summary(summary_str, step)
-            batch = train_set.next_batch()
+            # batch = train_set.next_batch()
 
             if validation_set is not None and step % 10 == 0:
                 # perform evaluation on validation set
@@ -136,55 +136,20 @@ def train(train_set, validation_set, layer_definitions):
         with open(layer_def_path, 'wb') as handle:
             pickle.dump(layer_definitions, handle)
 
-def train_simple(dataset, test_set):
+
+def train_simple(dataset, test_set, layer_definitions):
     learning_rate = 0.01
-    n_input = 28 * 28
-    n_classes = 3
     dropout = 0.75
 
     # tf Graph input
-    x = tf.placeholder(tf.float32, [None, 28, 28, 1])
-    y = tf.placeholder(tf.float32, [None, 3])
+    with tf.name_scope('Input'):
+        x = tf.placeholder(tf.float32, [None, FLAGS.image_width, FLAGS.image_height, 1], name='Images')
+        y = tf.placeholder(tf.float32, [None, dataset.get_num_classes()], name='Labels')
     keep_prob = tf.placeholder(tf.float32)
 
-    def conv2d(x, W, b, strides=1):
-        x = tf.nn.conv2d(x, W, strides=[1, strides, strides, 1], padding='SAME')
-        x = tf.nn.bias_add(x, b)
-        return tf.nn.relu(x)
+    pred = model.conv_net(x, layer_definitions, keep_prob)
+    #pred, _ = model.get_predictions(x, layer_definitions)
 
-    def maxpool2d(x, k=2):
-        return tf.nn.max_pool(x, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
-
-    def conv_net(x, weights, biases, dropout):
-        conv1 = conv2d(x, weights['wc1'], biases['bc1'])
-        conv1 = maxpool2d(conv1, k=2)
-
-        conv2 = conv2d(conv1, weights['wc2'], biases['bc2'])
-        conv2 = maxpool2d(conv2, k=2)
-
-        fc1 = tf.reshape(conv2, [-1, weights['wd1'].get_shape().as_list()[0]])
-        fc1 = tf.add(tf.matmul(fc1, weights['wd1']), biases['bd1'])
-        fc1 = tf.nn.relu(fc1)
-        fc1 = tf.nn.dropout(fc1, dropout)
-
-        out = tf.add(tf.matmul(fc1, weights['out']), biases['out'])
-        return out
-
-    weights = {
-        'wc1': tf.Variable(tf.random_normal([4, 4, 1, 32])),
-        'wc2': tf.Variable(tf.random_normal([4, 4, 32, 64])),
-        'wd1': tf.Variable(tf.random_normal([7*7*64, 1024])),
-        'out': tf.Variable(tf.random_normal([1024, 3]))
-    }
-
-    biases = {
-        'bc1': tf.Variable(tf.random_normal([32])),
-        'bc2': tf.Variable(tf.random_normal([64])),
-        'bd1': tf.Variable(tf.random_normal([1024])),
-        'out': tf.Variable(tf.random_normal([3])),
-    }
-
-    pred = conv_net(x, weights, biases, keep_prob)
     softmax = tf.nn.softmax(pred)
     one_hot_pred = tf.argmax(pred, 1)
 
@@ -198,25 +163,28 @@ def train_simple(dataset, test_set):
     accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
     init = tf.initialize_all_variables()
-
+    step = 0
     with tf.Session() as sess:
         sess.run(init)
-        print 'Training...'
+        #print 'Training...'
         batch = dataset.next_batch()
-        while batch is not None:
+        #while batch is not None:
+        while step <= 100:
             batch_x = batch.images
             batch_y = batch.labels
 
             sess.run(optimizer, feed_dict={x: batch_x,
                                            y: batch_y,
                                            keep_prob: dropout})
-            loss, acc, p, rp = sess.run([cost, accuracy, softmax, raw_prob], feed_dict={x: batch_x,
+            loss, acc = sess.run([cost, accuracy], feed_dict={x: batch_x,
                                                               y: batch_y,
                                                               keep_prob: 1.0})
-            print rp
-            print "Training: loss: {:.6f} accuracy: {:.4f}".format(loss, acc)
-            batch = dataset.next_batch()
+            if step == 100:
+                print "Training: step: {} loss: {:.6f} accuracy: {:.4f}".format(step, loss, acc)
+            step += 1
+            #batch = dataset.next_batch()
 
+        """
         print 'Evaluating...'
         batch = test_set.next_batch()
         while batch is not None:
@@ -232,4 +200,5 @@ def train_simple(dataset, test_set):
                                                   batch_y)
             confusion_matrix.print_to_console()
             batch = test_set.next_batch()
+        """
 

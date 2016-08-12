@@ -1,6 +1,5 @@
 import tensorflow as tf
 from abc import abstractmethod
-from tensorflow.python.ops import  control_flow_ops
 
 
 def _variable_on_cpu(name, shape, initializer):
@@ -48,10 +47,12 @@ def fc_nn_layer(name, input_tensor, nodes, act, return_preactivations):
     n_inputs = input_tensor.get_shape()[1].value
     with tf.variable_scope(name) as scope:
         # create weights
-        weights = _variable_on_cpu('weights', [n_inputs, nodes], tf.truncated_normal_initializer(stddev=0.04))
+        weights = tf.Variable(tf.random_normal([n_inputs, nodes], name='weights'))
+        #weights = _variable_on_cpu('weights', [n_inputs, nodes], tf.random_normal_initializer)
 
         # create biases
-        biases = _variable_on_cpu('biases', [nodes], tf.constant_initializer(0.1))
+        biases = tf.Variable(tf.random_normal([nodes], name='biases'))
+        #biases = _variable_on_cpu('biases', [nodes], tf.random_normal_initializer())
 
         # multiply inputs with weights andd add bias
         preactivations = tf.add(tf.matmul(input_tensor, weights), biases)
@@ -100,7 +101,8 @@ def conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=t
         conv = tf.nn.conv2d(input_tensor, filter, strides, padding='SAME')
 
         # make and apply biases
-        biases = _variable_on_cpu('biases', [filter_num], tf.constant_initializer(0.1))
+        biases = tf.Variable(tf.random_normal([filter_num], name='biases'))
+        #biases = _variable_on_cpu('biases', [filter_num], tf.random_normal_initializer())
         preactivations = tf.nn.bias_add(conv, biases)
 
         # calculate activations
@@ -113,105 +115,121 @@ def conv_layer(name, input_tensor, filter_size, filter_num, stride=[1, 1], act=t
 
 
 class LayerAbstract(object):
-    pass
 
-    @abstractmethod
-    def process(self, input_tensor):
+    @staticmethod
+    def apply(x):
         """
-        Processes input tensor, i.e. applies all operations that layer has
-        :param input_tensor: tensor, input data
-        :return: list of tensors of length >= 1
+        Apply layer on input x
+        :param x: tensor
+        :return: tensor
         """
-        pass
+        return x
+
+
+class LayerConv2d(LayerAbstract):
+
+    @staticmethod
+    def apply(x, filter_shape, filter_num, stride):
+        """
+        Apply 2d convolution on tensor x
+        :param x: tensor
+        :param stride: int
+        :return: tensor
+        """
+        channels = x.get_shape()[3]
+        weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]))
+        biases = tf.Variable(tf.random_normal([filter_num]))
+        conv2d = tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding='SAME')
+        conv2d = tf.nn.bias_add(x, biases)
+        return tf.nn.relu(conv2d)
 
 
 class LayerFullyConnected(LayerAbstract):
 
-    def __init__(self, name, nodes, batch_size, act=tf.nn.relu, return_preactivations=False):
-        self.name = name
-        self.nodes = nodes
-        self.activation_function = act
-        self.batch_size = batch_size
-        self.return_preactivations = return_preactivations
-
-    def process(self, input_tensor):
-        shape = input_tensor.get_shape()
-        if shape.ndims == 4:
-            n = shape[1] * shape[2] * shape[3]
-            _input_tensor = tf.reshape(input_tensor, tf.pack([self.batch_size, -1]))
-            _input_tensor.set_shape([None, n])
-        else:
-            _input_tensor = input_tensor
-
-        return fc_nn_layer(self.name,
-                           _input_tensor,
-                           self.nodes,
-                           self.activation_function,
-                           self.return_preactivations)
-
-
-class LayerConvolutional(LayerAbstract):
-
-    def __init__(self, name, filter_size, filter_num, strides=[1, 1], act=tf.nn.relu):
+    @staticmethod
+    def _prepare_input_tensor(x):
         """
-
-        :param name: string, layer name
-        :param filter_size: list of ints with length = 2, height and width of filter
-        :param filter_num: int, number of output channels, or number of filters
-        :param strides: list of ints with length = 2, steps in each direction. [1, 1] by default, i.e. whole image is used
-        :param act: tf.nn activation function, relu by default
+        Prepare input tensor for being processed in fullt connected layer
+        :param x: tensor
+        :return: tensor
         """
-        self.name = name
-        self.filter_size = filter_size
-        self.filter_num = filter_num
-        self.strides = strides
-        self.act = act
+        shape = x.get_shape()
+        if shape.ndims <= 2:
+            # no need to reshape
+            return x
 
-    def process(self, input_tensor):
-        return conv_layer(self.name,
-                          input_tensor,
-                          self.filter_size,
-                          self.filter_num,
-                          self.strides,
-                          self.act)
+        # reshape tensor x to make it 2d, 1 row per example
+        n = 1
+        for s in shape:
+            n *= s
+        out = tf.reshape(x, tf.pack([-1, n]))
+        out.set_shape([None, n])
+        return out
 
-
-class LayerPooling(LayerAbstract):
-
-    def __init__(self, name, size, strides):
+    @staticmethod
+    def _get_output(x, w, b, activation_function=None, keep_prob=None):
         """
-
-        :param name: string
-        :param size: list of int with length = 2
-        :param strides: list of int with length = 2
+        combine input with weights and biases, apply activation function and dropout
+        :param x: tensor, input to the layer
+        :param w: tensor, weights
+        :param b: tensor, biases
+        :param activation_function: ref to activation function
+        :param keep_prob: float, probability of keeping connection
+        :return: tensor
         """
-        self.name = name
-        self.size = size
-        self.strides = strides
+        out = tf.add(tf.matmul(x, w), b)
 
-    def process(self, input_tensor):
-        ksize = [1] + self.size + [1]
-        strides = [1] + self.strides + [1]
-        return tf.nn.max_pool(input_tensor,
-                              ksize=ksize,
-                              strides=strides,
-                              padding='SAME',
-                              name=self.name)
+        if activation_function is not None:
+            out = activation_function(out)
 
+        if keep_prob is not None:
+            out = tf.nn.dropout(out, keep_prob)
 
-class LayerNormalization(LayerAbstract):
+        return out
 
-    def __init__(self, name, depth_radius):
+    @classmethod
+    def apply(cls, x, nodes, activation_function, keep_prob=1):
         """
-
-        :param name: string
-        :param radius: int
+        Fully connected layer
+        :param x: tensor, input to the layer
+        :param nodes: int, number of output nodes
+        :param activation_function: ref to activation function
+        :param keep_prob: float, probability of keeping connection
+        :return: tensor
         """
-        self.name = name
-        self.depth_radius = depth_radius
+        x = cls._prepare_input_tensor(x)
+        n = x.get_shape()[1]
+        weights = tf.Variable(tf.random_normal([n, nodes]))
+        biases = tf.Variable(tf.random_normal([nodes]))
+        fc = cls._get_output(x, weights, biases, activation_function, keep_prob)
+        return fc
 
-    def process(self, input_tensor):
-        return tf.nn.local_response_normalization(input_tensor,
-                                                  self.depth_radius,
-                                                  name=self.name)
+class LayerOutput(LayerFullyConnected):
+
+    @classmethod
+    def apply(cls, x, nodes):
+        """
+        Last layer of the neural network, output layer
+        :param x: tensor, input
+        :param nodes: int, number of nodes
+        :return: tensor
+        """
+        return super(LayerOutput, cls).apply(x, nodes, None, keep_prob=None)
+
+
+class LayerMaxPool(LayerAbstract):
+
+    @staticmethod
+    def apply(x, size, stride):
+        """
+        Perform max pooling
+        :param x: tensor, input
+        :param size: int, size of pooling
+        :param stride: int, stride
+        :return: tensor
+        """
+        return tf.nn.max_pool(x,
+                              ksize=[1, size, size, 1],
+                              strides=[1, stride, stride, 1],
+                              padding='SAME')
 
