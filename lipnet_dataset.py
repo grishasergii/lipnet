@@ -11,6 +11,7 @@ import math
 import confusion_matrix as cf
 from smote import smote
 import math
+import helpers
 
 class Batch:
     def __init__(self, data, labels, ids):
@@ -69,7 +70,8 @@ class DatasetPD(DatasetAbstract):
     This is an implementation of lipnet dataset based on pandas dataframe and JSON
     """
 
-    def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28):
+    def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28,
+                 path_to_output='./output/', verbose=False):
         """
 
         :param path_to_json: full path to JSON file to be read into pandas dataframe
@@ -78,6 +80,9 @@ class DatasetPD(DatasetAbstract):
         :param num_epochs: integer, number of times whole dataset can be processed, leave NOne for unlimited
         """
         super(DatasetPD, self).__init__()
+        self.verbose = verbose
+        self.path_to_output = path_to_output
+
         self._df = pd.read_json(path_to_json)
         self._shape = self._df.shape
         self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
@@ -270,9 +275,23 @@ Majority class is undersampled by excluding randomly selected examples on each t
 class DatasetPDAugmented(DatasetPD):
 
     def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28,
-                 undersampling_rate=0.2):
+                 undersampling_rate=0.2, smote_rates=[2], verbose=False, path_to_output='./output/'):
+        """
+
+        :param path_to_json:
+        :param path_to_img:
+        :param batch_size:
+        :param num_epochs:
+        :param image_width:
+        :param image_height:
+        :param undersampling_rate:
+        :param smote_rates: list of floats of length >=1, SMOTE rate for all classes except majority class.
+        If number of classes is greater then number of rates provided, last rate is used
+        :param verbose: boolean, if enabled messages are print and intermediate results are saved for reporting purposes
+        """
         super(DatasetPDAugmented, self).__init__(path_to_json, path_to_img, batch_size, num_epochs=num_epochs,
-                                                 image_width=image_width, image_height=image_height)
+                                                 image_width=image_width, image_height=image_height, verbose=verbose,
+                                                 path_to_output=path_to_output)
 
         # dataframe to hold synthetic examples
         self._df_synthetic = pd.DataFrame(columns=['Id', 'Image'] + self._class_columns + self._prediction_columns)
@@ -289,8 +308,12 @@ class DatasetPDAugmented(DatasetPD):
         self._augment(self._minority_classes)
 
         # generate synthetic examples
-        for c in self._minority_classes:
-            self._oversample(c, 2)
+        for i, c in enumerate(self._minority_classes):
+            try:
+                smote_rate = smote_rates[i]
+            except IndexError:
+                smote_rate = smote_rates[-1]
+            self._oversample(c, smote_rate)
         pass
 
     @property
@@ -323,6 +346,36 @@ class DatasetPDAugmented(DatasetPD):
                 df.loc[i][self._class_columns] = example[self._class_columns]
         self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
 
+    def _save_synthetic_examples(self, examples, parents, parent_ids, class_name):
+        """
+        Saves synthetic images for reporting purposes
+        :param examples: array of size (num_examples, image_width*image_height)
+        :param parents: array of size (num_examples, image_width*image_height)
+        :param parent_ids: array of size (num_examples, 2)
+        :param class_name: string
+        :return: nothing
+        """
+        save_dir = os.path.join(self.path_to_output, 'figures/synthetic_examples/{}'.format(class_name))
+        helpers.prepare_dir(save_dir, empty=True)
+        parents = np.reshape(parents, (-1, self._image_width, self._image_height))
+        #parents_resized = parents
+        parents_resized = np.zeros((len(parents), 200, 200))
+        for i in xrange(len(parents)):
+            parents_resized[i] = resize(parents[i], (200, 200))
+
+        for i, img in enumerate(examples):
+            sys.stdout.write('\rSaving synthetic example {} of {}'.format(i+1, len(examples)))
+            sys.stdout.flush()
+            img = img.reshape((self._image_height, self._image_width))
+            img = resize(img, (200, 200))
+            io.imsave(os.path.join(save_dir, '{}_{}_synthetic.png'.format(class_name, i)), img)
+            io.imsave(os.path.join(save_dir, '{}_{}_parent_1.png'.format(class_name, i)),
+                      parents_resized[parent_ids[i, 0]])
+            io.imsave(os.path.join(save_dir, '{}_{}_parent_2.png'.format(class_name, i)),
+                      parents_resized[parent_ids[i, 1]])
+        sys.stdout.write('\n')
+
+
     def _oversample(self, class_name, rate):
         """
         Oversample examples of a class
@@ -330,6 +383,8 @@ class DatasetPDAugmented(DatasetPD):
         :param rate: float, rate of oversampling, 1 corresponds to 100%
         :return: nothing, generated examples are added to self._df_synthetic
         """
+        if self.verbose:
+            print 'Oversampling {}\r'.format(class_name)
         n_examples = self._df['Id'][self._df['Class'].isin([class_name])].count()
         labels = self._df[self._class_columns][self._df['Class'].isin([class_name])].values[0]
         images = np.zeros((n_examples, self._image_height * self._image_width))
@@ -341,12 +396,19 @@ class DatasetPDAugmented(DatasetPD):
 
         n = math.ceil(n_examples * rate)
         n = int(n)
-        synthetic_examples = smote(images, n, n_neighbours=5)
+
+        if self.verbose:
+            synthetic_examples, parent_ids = smote(images, n, n_neighbours=5, return_parent_ids=True)
+            self._save_synthetic_examples(synthetic_examples, images, parent_ids, class_name)
+        else:
+            synthetic_examples = smote(images, n, n_neighbours=5)
+
         df = pd.DataFrame(index=np.arange(0, n), columns=self._df_synthetic.columns.values)
 
         for i, img in enumerate(synthetic_examples):
             df.loc[i].Id = 's_{}_{}'.format(class_name, i)
-            df.loc[i].Image = img.reshape((self._image_height, self._image_width))
+            img = img.reshape((self._image_height, self._image_width))
+            df.loc[i].Image = img
             df.loc[i][self._class_columns] = labels
 
         self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
