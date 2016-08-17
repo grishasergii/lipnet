@@ -448,14 +448,14 @@ class DatasetPDAugmented(DatasetPD):
         self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
 
     def _create_chunks(self):
-        list_of_ids = self._df.Id[self._df.Class.isin([self._majority_class])].tolist()
+        list_of_ids = self._df.Id[self._df.Class.isin([self._majority_class])].values.copy()
         shuffle(list_of_ids)
-        for _ in xrange(0, self.undersampling_amount):
-            list_of_ids.pop()
+        list_of_ids = list_of_ids[self.undersampling_amount:]
 
-        list_of_ids += self._df.Id[self._df.Class.isin(self._minority_classes)].tolist()
+        list_of_ids = np.concatenate([list_of_ids,
+                                      self._df.Id[self._df.Class.isin(self._minority_classes)].values.copy(),
+                                      self._df_synthetic['Id'].values.copy()])
 
-        list_of_ids += self._df_synthetic['Id'].tolist()
         shuffle(list_of_ids)
         self._chunks = self.chunks(list_of_ids, self._batch_size)
 
