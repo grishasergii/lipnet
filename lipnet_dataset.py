@@ -198,7 +198,7 @@ class DatasetPD(DatasetAbstract):
         Creates chunks
         :return: nothing, result is written to self._chunks
         """
-        list_of_ids = self._df['Id'].tolist()
+        list_of_ids = self._df['Id'].values.copy()
         shuffle(list_of_ids)
         self._chunks = self.chunks(list_of_ids, self._batch_size)
 
@@ -237,6 +237,40 @@ class DatasetPD(DatasetAbstract):
         confusion_matrix = cf.ConfusionMatrix(self._df[self._prediction_columns].values,
                                               self._df[self._class_columns].values)
         confusion_matrix.print_to_console()
+
+    def roc(self):
+        """
+        Create ROC curve
+        :return:
+        """
+        from sklearn.metrics import roc_curve, auc
+        import matplotlib.pyplot as plt
+        fpr = dict()
+        tpr = dict()
+        thresholds = dict()
+        roc_auc = dict()
+        true_labels = self._df[self._class_columns].values
+        predictions = self._df[self._prediction_columns].values
+        for i in xrange(self.get_num_classes()):
+            fpr[i], tpr[i], thresholds[i] = roc_curve(true_labels[:, i], predictions[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+
+        # Plot of a ROC curve for a specific class
+        class_number = 2
+        plt.figure()
+
+        for i in xrange(3):
+            plt.plot(fpr[i], tpr[i], label='ROC curve of class {0} (area = {1:0.2f})'
+                                           ''.format(i, roc_auc[i]))
+
+        plt.plot([0, 1], [0, 1], 'k--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic example')
+        plt.legend(loc="lower right")
+        plt.show()
 
 
 class DatasetPDFeatures(DatasetPD):
