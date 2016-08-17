@@ -215,7 +215,14 @@ class LayerOutput(LayerFullyConnected):
         :param nodes: int, number of nodes
         :return: tensor
         """
-        return super(LayerOutput, cls).apply(x, nodes, None, keep_prob=None)
+        fc = super(LayerOutput, cls).apply(x, nodes, None, keep_prob=None, name=name)
+        max_logits = tf.reduce_max(tf.abs(fc), reduction_indices=[1])
+        max_logits = tf.tile(max_logits, [nodes])
+        max_logits = tf.reshape(max_logits, (nodes, -1))
+        max_logits = tf.transpose(max_logits)
+        fc = tf.div(fc, max_logits)
+
+        return fc
 
 
 class LayerMaxPool(LayerAbstract):
