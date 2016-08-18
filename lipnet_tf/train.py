@@ -1,8 +1,7 @@
 from __future__ import division
-import tensorflow as tf
-import model
-import os.path
 from . import FLAGS
+import tensorflow as tf
+import os.path
 from evaluate import evaluate
 
 
@@ -20,7 +19,16 @@ def _prepare_dir(directory):
 def train(dataset, model, validation_set=None):
     step = 0
     total_steps = dataset.num_steps
+
+    _prepare_dir(os.path.join(FLAGS.logdir, 'train'))
+    _prepare_dir(os.path.join(FLAGS.logdir, 'validation'))
+
+    merged = tf.merge_all_summaries()
+
     with tf.Session() as sess:
+        train_writer = tf.train.SummaryWriter(os.path.join(FLAGS.logdir, 'train'),
+                                              sess.graph)
+
         sess.run(model.init)
         # training
         batch = dataset.next_batch()
@@ -30,14 +38,17 @@ def train(dataset, model, validation_set=None):
 
             sess.run(model.optimizer, feed_dict={model.x: batch_x,
                                                  model.y: batch_y,
-                                                 model.keep_prob: model.dropout})
+                                                 model.keep_prob: model.dropout,
+                                                 model.learning_rate: 0.001})
 
             if step % 10 == 0:
                 if validation_set is None:
-                    loss, acc = sess.run([model.cost, model.accuracy], feed_dict={model.x: batch_x,
+                    summary, loss, acc = sess.run([merged, model.cost, model.accuracy], feed_dict={model.x: batch_x,
                                                                                   model.y: batch_y,
-                                                                                  model.keep_prob: 1.0})
+                                                                                  model.keep_prob: 1.0,
+                                                                                                   model.learning_rate: 0.001})
                     print "Training: step: {} of {} loss: {:.6f} accuracy: {:.4f}".format(step, total_steps, loss, acc)
+                    train_writer.add_summary(summary, step)
                 else:
                     checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
                     model.saver.save(sess, checkpoint_path, global_step=step)
@@ -50,3 +61,6 @@ def train(dataset, model, validation_set=None):
             step += 1
             batch = dataset.next_batch()
 
+        checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+        model.saver.save(sess, checkpoint_path, global_step=step)
+        print 'Training finished'
