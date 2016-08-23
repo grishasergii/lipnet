@@ -62,7 +62,7 @@ layer_definitions = [
                     return_preactivations=False),
 
     LayerDefinition(layer_type=LayerEnum.Output,
-                    name='softmax_linear',
+                    name='output',
                     fc_nodes=3,
                     activation_function=ActivationFunctionEnum.Softmax,
                     return_preactivations=True),

@@ -107,6 +107,20 @@ class DatasetPD(DatasetAbstract):
             return sys.maxint
         return int(self.num_epochs * math.ceil(self.get_count() / self._batch_size))
 
+    def step_to_epoch(self, step):
+        """
+        Converts step to epoch
+        :param step: int
+        :return: int
+        """
+        steps_per_epoch = math.ceil(self.get_count() / self._batch_size)
+        return int(math.ceil(step / steps_per_epoch))
+
+    @property
+    def confusion_matrix(self):
+        return cf.ConfusionMatrix(self._df[self._prediction_columns].values,
+                                  self._df[self._class_columns].values)
+
     def chunks(self, items, chunk_size):
         """
         Creates a generator
@@ -356,6 +370,15 @@ class DatasetPDAugmented(DatasetPD):
             return sys.maxint
         return int(self.num_epochs * math.ceil((self.get_count() - self.undersampling_amount) / self._batch_size))
 
+    def step_to_epoch(self, step):
+        """
+        Converts step to epoch
+        :param step: int
+        :return: int
+        """
+        steps_per_epoch = math.ceil((self.get_count() - self.undersampling_amount) / self._batch_size)
+        return int(math.ceil(step / steps_per_epoch))
+
     def get_count(self):
         real_count = super(DatasetPDAugmented, self).get_count()
         synthetic_count = self._df_synthetic.shape[0]
@@ -408,7 +431,6 @@ class DatasetPDAugmented(DatasetPD):
             io.imsave(os.path.join(save_dir, '{}_{}_parent_2.png'.format(class_name, i)),
                       parents_resized[parent_ids[i, 1]])
         sys.stdout.write('\n')
-
 
     def _oversample(self, class_name, rate):
         """

@@ -10,11 +10,11 @@ def main(argv=None):
     dir = '/home/sergii/Documents/microscopic_data/{}/'
     path_to_json = dir + '{}_{}_set.json'
     path_to_img = dir + 'images/without_padding/'
-    batch_size = 500
+    batch_size = 700
     FLAGS.batch_size = batch_size
     epochs = 1
     # create dataset
-    dataset = DatasetPD(path_to_json.format(problem, problem, 'validation'),
+    dataset = DatasetPD(path_to_json.format(problem, problem, 'train'),
                           path_to_img.format(problem),
                           batch_size=batch_size,
                           num_epochs=epochs)
