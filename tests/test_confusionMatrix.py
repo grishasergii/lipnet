@@ -62,7 +62,7 @@ class TestConfusionMatrix(TestCase):
                 [0.25, 0.25, 0.50]
             ]
         )
-        actual = self.confusion_matrix.matrix_normalized
+        actual = self.confusion_matrix.normalized
         actual = actual.round(decimals=2)
         are_equal = np.array_equal(actual, expected)
         self.assertEqual(are_equal, True)

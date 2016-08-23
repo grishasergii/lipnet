@@ -83,52 +83,52 @@ class ConfusionMatrix:
             'Shape of predictions and true labels array must be the same'
 
         # extract number of classes
-        self.__num_classes = predictions.shape[1]
+        self._num_classes = predictions.shape[1]
 
         # make class names
         if class_names is None:
-            self.__class_names = []
-            for i in xrange(self.__num_classes):
-                self.__class_names.append('Class_%d' % i)
+            self._class_names = []
+            for i in xrange(self._num_classes):
+                self._class_names.append('Class_%d' % i)
         else:
-            assert len(class_names) == self.__num_classes,\
+            assert len(class_names) == self._num_classes,\
                 'Number of class names must be equal to total number of classes'
-            self.__class_names = class_names
+            self._class_names = class_names
 
         # extract number of examples
-        self.__num_examples = predictions.shape[0]
+        self._num_examples = predictions.shape[0]
 
         # flatten one hot encoded predictions and labels
         _predictions = self.__flatten_one_hot(predictions)
         _labels = self.__flatten_one_hot(true_labels)
 
         # create placeholder for confusion matrix
-        self.__confusion_matrix = np.zeros([self.__num_classes, self.__num_classes])
+        self._confusion_matrix = np.zeros([self._num_classes, self._num_classes])
 
         # fill confusion matrix
-        for i in xrange(self.__num_examples):
+        for i in xrange(self._num_examples):
             r = _labels[i]
             c = _predictions[i]
-            self.__confusion_matrix[r, c] += 1
+            self._confusion_matrix[r, c] += 1
 
         # normalize confusion matrix
-        row_sums = self.__confusion_matrix.sum(axis=1, keepdims=True)
-        self.__confusion_matrix_normalized = self.__confusion_matrix / row_sums
+        row_sums = self._confusion_matrix.sum(axis=1, keepdims=True)
+        self._confusion_matrix_normalized = self._confusion_matrix / row_sums
 
         # create confusion tables for each class
         self.confusion_tables = {}
-        for i in xrange(self.__num_classes):
-            self.confusion_tables[self.__class_names[i]] = \
-                ConfusionTable(_predictions, _labels, i, name=self.__class_names[i])
-            #print self.confusion_tables[self.__class_names[i]]
+        for i in xrange(self._num_classes):
+            self.confusion_tables[self._class_names[i]] = \
+                ConfusionTable(_predictions, _labels, i, name=self._class_names[i])
+            #print self.confusion_tables[self._class_names[i]]
 
     @property
     def matrix_not_normalized(self):
-        return self.__confusion_matrix
+        return self._confusion_matrix
 
     @property
-    def matrix_normalized(self):
-        return self.__confusion_matrix_normalized
+    def normalized(self):
+        return self._confusion_matrix_normalized
 
     def print_to_console(self):
         """
@@ -136,7 +136,7 @@ class ConfusionMatrix:
         :return:
         """
         print 'Normalized confusion matrix'
-        for row in self.__confusion_matrix_normalized:
+        for row in self._confusion_matrix_normalized:
             for col in row:
                 print "{:.2f}\t".format(col),
             print ''
