@@ -1,9 +1,9 @@
-from __future__ import division
+from __future__ import division, print_function
 from . import FLAGS
 import tensorflow as tf
 import os.path
 from evaluate import evaluate
-import datetime
+from datetime import datetime
 import numpy as np
 import math
 from collections import OrderedDict
@@ -20,10 +20,12 @@ def prepare_dir(directory):
     tf.gfile.MakeDirs(directory)
 
 
-def train(dataset, model, validation_set=None, verbose=True):
+def _evaluate(sess, model, dataset, verbose=True):
+    return evaluate(dataset, model, session=sess, do_restore=False, verbose=verbose)
+
+def train(dataset, model, validation_set=None, verbose=True, eval_step=None):
     step = 0
     total_steps = dataset.num_steps
-    eval_step = 10
     prepare_dir(os.path.join(FLAGS.logdir, 'train'))
 
     merged = tf.merge_all_summaries()
@@ -34,9 +36,11 @@ def train(dataset, model, validation_set=None, verbose=True):
     # 1 - accuracy
     # 2 - confusion matrix
 
-    validation_stats = np.zeros([int(math.floor(total_steps / eval_step)), 3])
-    validation_cf = np.zeros([int(math.floor(total_steps / eval_step)),
-                              validation_set.get_num_classes() * validation_set.get_num_classes()])
+    validation_stats = None
+    if validation_set is not None and eval_step is not None:
+        validation_stats = np.zeros([int(math.floor(total_steps / eval_step)), 3])
+        validation_cf = np.zeros([int(math.floor(total_steps / eval_step)),
+                                  validation_set.get_num_classes() * validation_set.get_num_classes()])
 
     with tf.Session() as sess:
         train_writer = tf.train.SummaryWriter(os.path.join(FLAGS.logdir, 'train'), sess.graph)
@@ -47,6 +51,8 @@ def train(dataset, model, validation_set=None, verbose=True):
         batch = dataset.next_batch()
         while batch is not None:
             step += 1
+            if verbose:
+                print("\r{}: Training step {} of {}".format(datetime.now(), step, total_steps), end='')
 
             batch_x = batch.images
             batch_y = batch.labels
@@ -56,31 +62,22 @@ def train(dataset, model, validation_set=None, verbose=True):
                                                  model.keep_prob: model.dropout,
                                                  model.learning_rate: 0.001})
 
-            if step % eval_step == 0:
+            if eval_step is not None and step % eval_step == 0:
                 if verbose:
-                    print "{}: step: {} of {} ".format(datetime.datetime.now(), step, total_steps)
+                    print("\r{}: step: {} of {} ".format(datetime.now(), step, total_steps), end='')
                 # Do evaluation on training set and write summaries
                 summary, batch_loss, batch_acc = sess.run([merged, model.cost, model.accuracy], feed_dict={model.x: batch_x,
                                                                               model.y: batch_y,
                                                                               model.keep_prob: 1.0,
                                                                                                model.learning_rate: 0.001})
                 if verbose:
-                    print "Training:\t batch loss: {:.6f} accuracy: {:.4f}".format(batch_loss, batch_acc)
+                    print("\r{}: step: {} of {} Training:\t batch loss: {:.6f} accuracy: {:.4f}".
+                          format(datetime.now(), step, total_steps, batch_loss, batch_acc), end='')
                 train_writer.add_summary(summary, step)
 
                 # Do evaluation on validation set and write summaries
                 if validation_set is not None:
-                    checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
-                    model.saver.save(sess, checkpoint_path, global_step=step)
-                    validation_set.reset()
-                    validation_loss, validation_acc, confusion_matrix = evaluate(validation_set, model, do_restore=True, verbose=False)
-                    if verbose:
-                        print "Validation:\t total loss: {:.6f} accuracy: {:.4f}".format(validation_loss, validation_acc)
-                    i = int(math.floor(step / eval_step)) - 1
-                    validation_stats[i, 0] = validation_loss
-                    validation_stats[i, 1] = validation_acc
-                    validation_cf[i, :] = ["%.2f" % f for f in confusion_matrix.normalized.flatten()]
-
+                    _evaluate(sess, model, validation_set, verbose=verbose)
 
             if step % 100 == 0:
                 checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
@@ -88,23 +85,35 @@ def train(dataset, model, validation_set=None, verbose=True):
 
             batch = dataset.next_batch()
 
-        checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
-        model.saver.save(sess, checkpoint_path, global_step=step)
-        if verbose:
-            print 'Training finished'
+        if validation_set is not None:
+            validation_loss, validation_acc, validation_cf = _evaluate(sess, validation_set, verbose=verbose)
 
+
+    checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+    model.saver.save(sess, checkpoint_path, global_step=step)
+    if verbose:
+        print('')
+        print('{}: Training finished'.format(datetime.now()))
+
+    output = {
+        "final_batch_loss": "%.4f" % batch_loss,
+        "final_batch_acc": "%.4f" % batch_acc,
+    }
+
+    if validation_set is not None:
+        output['validation_loss'] = validation_loss
+        output['validation_acc'] = validation_acc
+        output['validation_cf'] = validation_cf
+
+    if validation_set is not None and validation_stats is not None:
         min_validation_loss_i = validation_stats.argmin(axis=0)[0]
         max_validation_acc_i = validation_stats.argmax(axis=0)[1]
-        output = {
-            "final_batch_loss": "%.4f" % batch_loss,
-            "final_batch_acc": "%.4f" % batch_acc,
-            "z_confusion_matrix_final": ["%.2f" % x for x in validation_cf[-1, :]],
-            "min_validation_loss:": "%.4f" % validation_stats[min_validation_loss_i, 0],
-            "max_validation_acc": "%.4f" % validation_stats[max_validation_acc_i, 1],
-            "min_validation_loss_epoch": dataset.step_to_epoch((min_validation_loss_i + 1) * eval_step),
-            "z_confusion_matrix_min_loss": ["%.2f" % x for x in validation_cf[min_validation_loss_i, :]],
-            "max_validation_acc_epoch": dataset.step_to_epoch((max_validation_acc_i + 1) * eval_step),
-            "z_confusion_matrix_max_acc": ["%.2f" % x for x in validation_cf[max_validation_acc_i, :]]
-        }
+        output["z_confusion_matrix_final"] = ["%.2f" % x for x in validation_cf[-1, :]],
+        output["min_validation_loss:"] = "%.4f" % validation_stats[min_validation_loss_i, 0],
+        output["max_validation_acc"] = "%.4f" % validation_stats[max_validation_acc_i, 1],
+        output["min_validation_loss_epoch"] = dataset.step_to_epoch((min_validation_loss_i + 1) * eval_step),
+        output["z_confusion_matrix_min_loss"] = ["%.2f" % x for x in validation_cf[min_validation_loss_i, :]],
+        output["max_validation_acc_epoch"] = dataset.step_to_epoch((max_validation_acc_i + 1) * eval_step),
+        output["z_confusion_matrix_max_acc"] = ["%.2f" % x for x in validation_cf[max_validation_acc_i, :]]
 
-        return OrderedDict(sorted(output.items(), key=lambda t: t[0]))
+    return OrderedDict(sorted(output.items(), key=lambda t: t[0]))
