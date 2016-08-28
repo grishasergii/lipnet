@@ -7,12 +7,13 @@ import re
 import math
 
 
-def repair_json(in_file, out_file):
+def repair_json(in_file, out_file, path_to_img):
     """
     Repairs original JSON files that describe particles. Put comma between JSON objects and enclose the list into square
     brackets
     :param in_file: full path to JSON file to be repaired
     :param out_file: full path file where repaired JSON is dumped
+    :param path_to_img: string, full path to directory with images
     :return: dumps repaired JSON to a file with specified name
     """
     with open(in_file, 'rb') as f:
@@ -41,7 +42,11 @@ def repair_json(in_file, out_file):
 
     # create JSON object
     repaired_json = json.loads(data_join_str)
-
+    for x in repaired_json:
+        f = os.path.join(path_to_img, x['Image'])
+        print x['Image']
+        if not os.path.isfile(f):
+            repaired_json.remove(x)
     # remove out_file if it exists
     try:
         os.remove(out_file)
@@ -49,7 +54,7 @@ def repair_json(in_file, out_file):
         pass
     except IOError:
         pass
-
+    print 'dumping...'
     with open(out_file, 'w+') as f:
         json.dump(repaired_json, f)
 
@@ -147,14 +152,17 @@ def main():
     path_to_json = dir + 'particles_repaired.json'
     path_to_images = dir + 'images/particles/'
     out_path = dir + '{}_'
-
+    """
     for p in problems:
         make_train_validation_test_sets(path_to_json.format(p),
                                         out_path.format(p, p),
                                         path_to_images.format(p),
                                         do_print=True)
-
-    #repair_json(dir + 'particles.json', dir + 'particles_repaired_2.json')
+    """
+    repair_json(os.path.join(dir.format('lamellarity'), 'particles.json'),
+                os.path.join(dir.format('lamellarity'), 'particles_repaired.json'),
+                os.path.join(dir.format('lamellarity'), 'images/particles')
+                )
 
 
 if __name__ == '__main__':

@@ -130,6 +130,12 @@ class ConfusionMatrix:
     def normalized(self):
         return self._confusion_matrix_normalized
 
+    @property
+    def as_str(self):
+        out = ["%.2f" % x for x in self._confusion_matrix_normalized.flatten()]
+        out = ' '.join(out)
+        return out
+
     def print_to_console(self):
         """
 

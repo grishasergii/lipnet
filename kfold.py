@@ -14,7 +14,13 @@ class KFold:
         """
         self.k = k
         self._df = pd.read_json(path_to_json)
+        # replace integers with class names for better readability
+        self._df['Class'] = self._df['Class'].replace(to_replace=[3, 4, 5, 7, 8, 10],
+                                          value=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty', 'Full',
+                                                 'Uncertain'])
+        # present class captions as one hot encoding
         self._df = pd.concat([self._df, pd.get_dummies(self._df['Class'], prefix='Label')], axis=1)
+
         self._df['Image'] = path_to_img + self._df['Image'].astype(str)
 
         self._df['Fold'] = 0
