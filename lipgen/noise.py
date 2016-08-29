@@ -46,6 +46,9 @@ class Noise(object):
         :param size: int > 1, smoothinf factor
         :return: float
         """
+        if size == 0:
+            return 0
+
         x = x / size
         y = y / size
         fract_x = x - int(x)
@@ -81,6 +84,9 @@ class Noise(object):
         :param size: int, size of turbulence
         :return: float
         """
+        if size == 0:
+            return 0
+
         size_sum = 0
         value = 0
         while size >= 1:
