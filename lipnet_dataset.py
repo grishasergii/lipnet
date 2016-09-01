@@ -41,14 +41,6 @@ class DatasetAbstract(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def next_batch(self):
-        """
-        Yields a batch of data
-        :return: batch
-        """
-        pass
-
-    @abstractmethod
     def get_num_classes(self):
         """
 
@@ -64,13 +56,18 @@ class DatasetAbstract(object):
         """
         pass
 
+    @abstractmethod
+    def iterate_minibatches(self, shuffle_=False):
+        pass
+
 
 class DatasetPD(DatasetAbstract):
     """
     This is an implementation of lipnet dataset based on pandas dataframe and JSON
     """
 
-    def __init__(self, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28,
+    @classmethod
+    def from_json(cls, path_to_json, path_to_img, batch_size=100, num_epochs=None, image_width=28, image_height=28,
                  path_to_output='./output/', verbose=False):
         """
 
@@ -83,9 +80,8 @@ class DatasetPD(DatasetAbstract):
         :param path_to_output:
         :param verbose:
         """
-        super(DatasetPD, self).__init__()
-        df = self.dataframe_from_json(path_to_json, path_to_img)
-        self.__init__(df, batch_size=batch_size, num_epochs=num_epochs,
+        df = cls.dataframe_from_json(path_to_json, path_to_img)
+        return cls(df, batch_size=batch_size, num_epochs=num_epochs,
                       image_width=image_width, image_height=image_height,
                       path_to_output=path_to_output, verbose=verbose)
 
@@ -102,7 +98,7 @@ class DatasetPD(DatasetAbstract):
         self.verbose = verbose
         self.path_to_output = path_to_output
 
-        self._df = df
+        self._df = df.copy()
         self._shape = self._df.shape
 
         self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
@@ -132,21 +128,16 @@ class DatasetPD(DatasetAbstract):
         return int(self.num_epochs * math.ceil(self.get_count() / self._batch_size))
 
     @property
+    def batches_count(self):
+        return int(math.ceil(self.get_count() / self._batch_size))
+
+    @property
     def num_batches(self):
         """
         Returns number of batches per epoch
         :return: int
         """
         return math.ceil(self.get_count() / self._batch_size)
-
-    def step_to_epoch(self, step):
-        """
-        Converts step to epoch
-        :param step: int
-        :return: int
-        """
-        steps_per_epoch = math.ceil(self.get_count() / self._batch_size)
-        return int(math.ceil(step / steps_per_epoch))
 
     @property
     def confusion_matrix(self):
@@ -172,32 +163,16 @@ class DatasetPD(DatasetAbstract):
         df['Image'] = path_to_img + df['Image'].astype(str)
         return df
 
-    def chunks(self, items, chunk_size):
-        """
-        Creates a generator
-        :param items: iterable, list of items to be transformed into chunks
-        :param chunk_size: integer, number of items in a chunk. This is a maximum number of items, chunk can be smaller if
-                    total length of l is not divisible by n
-        :return: generator
-        """
-        for i in xrange(0, len(items), chunk_size):
-            yield items[i:i + chunk_size]
-
-    def next_batch(self):
-        """
-        Yields a batch of data
-        :return: batch
-        """
-        if self._chunks is None:
-            self._create_chunks()
-        try:
-            ids = self._chunks.next()
-        except StopIteration:
-            if self._try_reset():
-                return self.next_batch()
-            else:
-                return None
-        return self._get_batch(ids)
+    def iterate_minibatches(self, shuffle_=False):
+        ids = self._df.Id.values
+        if shuffle_:
+            np.random.shuffle(ids)
+        start_idx = 0
+        while start_idx < ids.shape[0]:
+            excerpt = ids[start_idx:start_idx + self._batch_size]
+            minibatch = self._get_batch(excerpt)
+            start_idx += self._batch_size
+            yield minibatch
 
     def _read_image(self, image_name):
         """
@@ -236,29 +211,6 @@ class DatasetPD(DatasetAbstract):
         labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
         return Batch(images, labels, np.array(ids))
 
-    def _try_reset(self):
-        """
-        Resets chunks if epochs limit is not reached
-        :return: boolean
-        """
-        if self.num_epochs is not None:
-            if self._epoch_count >= (self.num_epochs - 1):
-                return False
-
-        self._epoch_count += 1
-        self._create_chunks()
-        return True
-
-    def reset(self):
-        """
-        Resets epoch count and chunks generator
-        :return: nothing
-        """
-        for col in self._prediction_columns:
-            self._df[col] = 0
-        self._epoch_count = 0
-        self._create_chunks()
-
     def print_stats(self):
         """
         Prints som dataframe statistics to console
@@ -266,19 +218,6 @@ class DatasetPD(DatasetAbstract):
         """
         print '{} columns and {} rows'.format(self._shape[1], self._shape[0])
         print self._df['Class'].value_counts()
-
-    def _create_chunks(self):
-        """
-        Creates chunks
-        :return: nothing, result is written to self._chunks
-        """
-        list_of_ids = self._df['Id'].values.copy()
-
-        shuffle(list_of_ids)
-
-        self._chunks = self.chunks(list_of_ids, self._batch_size)
-
-    # DatasetAbstract methods
 
     def get_count(self):
         """
@@ -307,7 +246,12 @@ class DatasetPD(DatasetAbstract):
         assert shape[1] == self.get_num_classes(), "Number of classes in dataset and in predictions must be the same"
         assert ids.ndim == 1, "ids must be a vector"
         assert shape[0] == len(ids), "Number of ids and predictions must be the same"
-        self._df.loc[self._df.Id.isin(ids), self._prediction_columns] = predictions
+        for i, _id in enumerate(ids):
+            try:
+                ix = self._df.loc[self._df.Id == _id].index
+                self._df.loc[ix, self._prediction_columns] = predictions[i]
+            except TypeError:
+                pass
 
     def evaluate(self):
         confusion_matrix = cf.ConfusionMatrix(self._df[self._prediction_columns].values,
@@ -451,21 +395,26 @@ class DatasetPDAugmented(DatasetPD):
             self._oversample(c, smote_rate)
         pass
 
+    def iterate_minibatches(self, shuffle_=False):
+        undersampled_ids = self._df.Id.values.copy()
+        n = int(math.ceil(undersampled_ids.shape[0] * (1 - self._undersampling_rate)))
+        mask = np.random.choice(undersampled_ids.shape[0], n)
+        undersampled_ids = undersampled_ids[mask]
+        ids = np.concatenate((undersampled_ids, self._df_synthetic.Id.values))
+        if shuffle_:
+            np.random.shuffle(ids)
+        start_idx = 0
+        while start_idx < ids.shape[0]:
+            excerpt = ids[start_idx:start_idx + self._batch_size]
+            minibatch = self._get_batch(excerpt)
+            start_idx += self._batch_size
+            yield minibatch
 
     @property
     def num_steps(self):
         if self.num_epochs is None:
             return sys.maxint
         return int(self.num_epochs * math.ceil((self.get_count() - self.undersampling_amount) / self._batch_size))
-
-    def step_to_epoch(self, step):
-        """
-        Converts step to epoch
-        :param step: int
-        :return: int
-        """
-        steps_per_epoch = math.ceil((self.get_count() - self.undersampling_amount) / self._batch_size)
-        return int(math.ceil(step / steps_per_epoch))
 
     def get_count(self):
         real_count = super(DatasetPDAugmented, self).get_count()
@@ -558,18 +507,6 @@ class DatasetPDAugmented(DatasetPD):
 
         self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
 
-    def _create_chunks(self):
-        list_of_ids = self._df.Id[self._df.Class.isin([self._majority_class])].values.copy()
-        shuffle(list_of_ids)
-        list_of_ids = list_of_ids[self.undersampling_amount:]
-
-        list_of_ids = np.concatenate([list_of_ids,
-                                      self._df.Id[self._df.Class.isin(self._minority_classes)].values.copy(),
-                                      self._df_synthetic['Id'].values.copy()])
-
-        shuffle(list_of_ids)
-        self._chunks = self.chunks(list_of_ids, self._batch_size)
-
     def _get_batch(self, ids):
         """
         Creates a batch from example ids
@@ -603,7 +540,12 @@ class DatasetPDAugmented(DatasetPD):
 
     def set_predictions(self, ids, predictions):
         super(DatasetPDAugmented, self).set_predictions(ids, predictions)
-        self._df_synthetic.loc[self._df_synthetic.Id.isin(ids), self._prediction_columns] = predictions
+        for i, _id in enumerate(ids):
+            try:
+                ix = self._df_synthetic.loc[self._df_synthetic.Id == _id].index
+                self._df_synthetic.loc[ix, self._prediction_columns] = predictions[i]
+            except TypeError:
+                pass
 
     def evaluate(self):
         confusion_matrix = cf.ConfusionMatrix(self._df[self._prediction_columns].values + self._df_synthetic[self._prediction_columns].values,
