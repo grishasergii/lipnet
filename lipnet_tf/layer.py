@@ -45,52 +45,6 @@ class LayerAbstract(object):
 
 class LayerConv2d(LayerAbstract):
 
-    @staticmethod
-    def _get_grid_dim(x):
-        """
-        Transforms x into product of two integers
-        :param x: int
-        :return: two ints
-        """
-        factors = prime_powers(x)
-        if len(factors) % 2 == 0:
-            i = int(len(factors) / 2)
-            return factors[i], factors[i-1]
-
-        i = len(factors) // 2
-        return factors[i], factors[i]
-
-    @staticmethod
-    def _put_filters_on_grid(filters, (grid_x, grid_y), pad=1):
-        """
-        Transform conv weights to an image for visualizing purpose.
-        based on https://gist.github.com/kukuruza/03731dc494603ceab0c5
-        :param filters: tensor, conv weights
-        :param (grid_x, grid_y): shape of the grid
-        :param pad: int, padding between features
-        :return: tensor
-        """
-        channels = 1
-        # scale to [0, 1]
-        x_min = tf.reduce_min(filters)
-        x_max = tf.reduce_max(filters)
-        _filters = (filters - x_min) / (x_max - x_min)
-
-        # pad X and Y
-        out = tf.pad(_filters, tf.constant([[pad, pad], [pad, pad], [0, 0], [0, 0]]))
-
-        y = filters.get_shape()[0] + pad*2
-        x = filters.get_shape()[1] + pad*2
-
-        out = tf.transpose(out, (3, 0, 1, 2))
-        out = tf.reshape(out, tf.pack([grid_x, y * grid_y, x, channels]))
-        out = tf.transpose(out, (0, 2, 1, 3))
-        out = tf.reshape(out, tf.pack([1, x * grid_x, y * grid_y, channels]))
-        out = tf.transpose(out, (2, 1, 3, 0))
-        out = tf.transpose(out, (3, 0, 1, 2))
-
-        return out
-
     @classmethod
     def apply(cls, name, x, filter_shape, filter_num, stride):
         """
@@ -101,18 +55,21 @@ class LayerConv2d(LayerAbstract):
         :return: tensor
         """
         channels = x.get_shape()[3].value
-        weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]))
-        # visualize only first convolutional layer
-        if channels == 1:
-            weights_visualized = cls._put_filters_on_grid(weights,
-                                                      cls._get_grid_dim(filter_num * channels))
-            with tf.name_scope(name):
-                with tf.name_scope('Features') as scope:
-                    tf.image_summary(scope, weights_visualized, max_images=20)
-        biases = tf.Variable(tf.random_normal([filter_num]))
-        conv2d = tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding='SAME')
-        conv2d = tf.nn.bias_add(conv2d, biases)
-        return tf.nn.relu(conv2d)
+        with tf.name_scope(name):
+            with tf.name_scope('Weights') as scope:
+                weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]), name='{}_weights'.format(name))
+                cls.variable_summaries(weights, scope)
+            with tf.name_scope('Biases') as scope:
+                biases = tf.Variable(tf.random_normal([filter_num]))
+                cls.variable_summaries(biases, scope)
+            with tf.name_scope('Preactivations') as scope:
+                preactivations = tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding='SAME')
+                preactivations = tf.nn.bias_add(preactivations, biases)
+                cls.variable_summaries(preactivations, scope)
+            with tf.name_scope('Activations') as scope:
+                activations = tf.nn.relu(preactivations)
+                cls.variable_summaries(activations, scope)
+        return activations
 
 
 class LayerFullyConnected(LayerAbstract):
@@ -150,7 +107,7 @@ class LayerFullyConnected(LayerAbstract):
         :return: tensor
         """
         with tf.name_scope(layer_scope):
-            with tf.name_scope('Pre_activations') as scope:
+            with tf.name_scope('Preactivations') as scope:
                 preactivate = tf.add(tf.matmul(x, w), b)
                 LayerAbstract.variable_summaries(preactivate, scope)
 
@@ -213,17 +170,21 @@ class LayerOutput(LayerFullyConnected):
 
 class LayerMaxPool(LayerAbstract):
 
-    @staticmethod
-    def apply(x, size, stride):
+    @classmethod
+    def apply(cls, name, x, size, stride):
         """
         Perform max pooling
+        :param name: string, layer name
         :param x: tensor, input
         :param size: int, size of pooling
         :param stride: int, stride
         :return: tensor
         """
-        return tf.nn.max_pool(x,
-                              ksize=[1, size, size, 1],
-                              strides=[1, stride, stride, 1],
-                              padding='SAME')
+        with tf.name_scope(name) as scope:
+            result = tf.nn.max_pool(x,
+                                  ksize=[1, size, size, 1],
+                                  strides=[1, stride, stride, 1],
+                                  padding='SAME')
+            cls.variable_summaries(result, scope)
+        return result
 

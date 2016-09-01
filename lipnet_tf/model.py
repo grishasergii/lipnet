@@ -7,6 +7,7 @@ from . import FLAGS
 class Model(object):
 
     def __init__(self, num_classes, layer_definition):
+        tf.reset_default_graph()
         self.dropout = 0.75
 
         # tf Graph input
@@ -28,18 +29,18 @@ class Model(object):
         one_hot_pred = tf.argmax(logits, 1)
         correct_pred = tf.equal(one_hot_pred, tf.argmax(self.y, 1))
 
-        with tf.name_scope('Performance'):
+        with tf.name_scope('Performance_Batch'):
             with tf.name_scope('Accuracy') as scope:
-                # accuracy
-                self.accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-                tf.scalar_summary(scope, self.accuracy)
+                # accuracy_batch
+                self.accuracy_batch = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+                tf.scalar_summary(scope, self.accuracy_batch)
             with tf.name_scope('Cross_entropy') as scope:
-                # cost function
-                self.cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, self.y))
-                tf.scalar_summary(scope, self.cost)
+                # loss_batch function
+                self.loss_batch = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, self.y))
+                tf.scalar_summary(scope, self.loss_batch)
 
         # optimizer
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_batch)
 
         self.init = tf.initialize_all_variables()
         self.saver = tf.train.Saver()
@@ -50,7 +51,7 @@ class Model(object):
             if ld.layer_type == LayerEnum.Convolutional:
                 layer = LayerConv2d.apply(ld.name, layer, ld.filter_size, ld.filter_num, ld. stride)
             elif ld.layer_type == LayerEnum.PoolingMax:
-                layer = LayerMaxPool.apply(layer, ld.pooling_size, ld.stride)
+                layer = LayerMaxPool.apply(ld.name, layer, ld.pooling_size, ld.stride)
             elif ld.layer_type == LayerEnum.FullyConnected:
                 act = {
                     ActivationFunctionEnum.Relu: tf.nn.relu,
