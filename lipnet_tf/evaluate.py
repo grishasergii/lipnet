@@ -7,7 +7,7 @@ import os
 import numpy as np
 
 
-def evaluate(dataset, model, session=None, do_restore=True, verbose=True):
+def evaluate(dataset, model, session=None, do_restore=True, verbose=True, return_confusion_matrix=False, summary_writer=None):
     """
 
     :param dataset:
@@ -52,10 +52,14 @@ def evaluate(dataset, model, session=None, do_restore=True, verbose=True):
                                                                     model.y: batch_y,
                                                                     model.keep_prob: 1.0,
                                                                     model.learning_rate: 0})
-            dataset.set_predictions(batch.ids, batch_pred)
+            if return_confusion_matrix:
+                dataset.set_predictions(batch.ids, batch_pred)
             loss += batch_loss * batch.size
             acc += batch_acc * batch.size
             examples_count += batch.size
+        if summary_writer is not None:
+            summary_writer.add_summary(summary, FLAGS.global_step)
+            FLAGS.global_step += 1
 
         loss /= examples_count
         acc /= examples_count
@@ -68,5 +72,9 @@ def evaluate(dataset, model, session=None, do_restore=True, verbose=True):
         if close_session:
             sess.close()
 
-    return loss, acc, dataset.confusion_matrix, summary
+    cf = None
+    if return_confusion_matrix:
+        cf = dataset.confusion_matrix
+
+    return loss, acc, cf, summary
         #dataset.evaluate()

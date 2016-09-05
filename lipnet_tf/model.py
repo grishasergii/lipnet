@@ -26,7 +26,7 @@ class Model(object):
         logits = self._get_logits(layer_definition)
         self.predictions = tf.nn.softmax(logits)
 
-        one_hot_pred = tf.argmax(logits, 1)
+        one_hot_pred = tf.argmax(self.predictions, 1)
         correct_pred = tf.equal(one_hot_pred, tf.argmax(self.y, 1))
 
         with tf.name_scope('Performance_Batch'):
@@ -38,6 +38,14 @@ class Model(object):
                 # loss_batch function
                 self.loss_batch = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, self.y))
                 tf.scalar_summary(scope, self.loss_batch)
+            """
+            with tf.name_scope('Weights_loss') as scope:
+                self.loss_weights = tf.add_n(tf.get_collection('weight_losses'))
+                tf.scalar_summary(scope, self.loss_weights)
+            with tf.name_scope('Total_loss') as scope:
+                self.loss_total = tf.add(self.loss_batch, self.loss_weights)
+                tf.scalar_summary(scope, self.loss_total)
+            """
 
         # optimizer
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_batch)

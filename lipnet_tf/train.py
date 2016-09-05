@@ -21,12 +21,34 @@ def prepare_dir(directory):
     tf.gfile.MakeDirs(directory)
 
 
-def _evaluate(sess, model, dataset, verbose=True):
-    return evaluate(dataset, model, session=sess, do_restore=False, verbose=verbose)
+def _evaluate(sess, model, dataset, verbose=True, return_confusion_matrix=False, summary_writer=None):
+    return evaluate(dataset, model, session=sess, do_restore=False, verbose=verbose,
+                    return_confusion_matrix=return_confusion_matrix,
+                    summary_writer=summary_writer)
 
 
-def train(dataset, model, epochs, validation_set=None, verbose=True, eval_step=None, intermediate_evaluation=False,
-          plot_path=''):
+def train(dataset,
+          model,
+          epochs,
+          validation_set=None,
+          verbose=True,
+          intermediate_evaluation=False,
+          plot_path='',
+          early_stopping=False):
+    """
+
+    :param dataset:
+    :param model:
+    :param epochs:
+    :param validation_set:
+    :param verbose:
+    :param intermediate_evaluation:
+    :param plot_path:
+    :param early_stopping:
+    :return:
+    """
+    if verbose:
+        print('\r{}: Training started'.format(datetime.now()))
     global_step = 0
     total_batches = dataset.batches_count
     prepare_dir(os.path.join(FLAGS.logdir, 'train'))
@@ -41,13 +63,19 @@ def train(dataset, model, epochs, validation_set=None, verbose=True, eval_step=N
     validation_accuracy = [0] * epochs
     validation_loss = [0] * epochs
 
+    # early stopping
+    max_epochs_without_improvement = 20
+    epochs_witout_improvement = 0
+    min_validation_loss = 999999
+    min_loss_epoch = -1
+
     with tf.Session() as sess:
         train_writer = tf.train.SummaryWriter(os.path.join(FLAGS.logdir, 'train'), sess.graph)
         validation_writer = tf.train.SummaryWriter(os.path.join(FLAGS.logdir, 'validation'), sess.graph)
 
         sess.run(model.init)
-
-        for epoch in xrange(epochs):
+        epoch = 0
+        while epoch < epochs and epochs_witout_improvement < max_epochs_without_improvement:
             # iterate over entire dataset in minibatches
             for i, batch in enumerate(dataset.iterate_minibatches(shuffle_=True)):
                 global_step += 1
@@ -64,40 +92,66 @@ def train(dataset, model, epochs, validation_set=None, verbose=True, eval_step=N
                                                      model.keep_prob: model.dropout,
                                                      model.learning_rate: 0.001})
 
-            # do evaluation
+            # evaluate training set
             if intermediate_evaluation:
                 if verbose:
                     print('\r{}: Epoch {}/{} Evaluating Training set:'.format(datetime.now(),
                                                                               epoch + 1, epochs,), end='')
                     # Do evaluation on training set and write summaries
                 train_loss[epoch], train_accuracy[epoch], _, train_summary = \
-                    _evaluate(sess, model, dataset, verbose=False)
-                train_writer.add_summary(train_summary, epoch)
+                    _evaluate(sess, model, dataset, verbose=False, return_confusion_matrix=False,
+                              summary_writer=train_writer)
+                #train_writer.add_summary(train_summary, epoch)
 
-                # Do evaluation on validation set and write summaries
+            save_scheckpoint = True
+            current_loss = None
+            # evaluate validation set
+            if intermediate_evaluation or early_stopping:
                 if validation_set is not None:
                     if verbose:
                         print('\r{}: Epoch {}/{} Evaluating Validation set:'.format(datetime.now(),
                                                                                     epoch + 1, epochs,), end='')
-                    validation_loss[epoch], validation_accuracy[epoch], _, validation_summary = \
-                        _evaluate(sess, model, validation_set, verbose=False)
-                    validation_writer.add_summary(validation_summary, epoch)
+                    current_loss, validation_accuracy[epoch], _, validation_summary = \
+                        _evaluate(sess, model, validation_set, verbose=False, return_confusion_matrix=False,
+                                  summary_writer=validation_writer)
+                    validation_loss[epoch] = current_loss
+                    #validation_writer.add_summary(validation_summary, epoch)
 
+            if early_stopping:
+                if current_loss is not None:
+                    if current_loss < min_validation_loss:
+                        min_validation_loss = current_loss
+                        save_scheckpoint = True
+                        epochs_witout_improvement = 0
+                        min_loss_epoch = epoch
+                    else:
+                        save_scheckpoint = False
+                        epochs_witout_improvement += 1
 
-            checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
-            model.saver.save(sess, checkpoint_path, global_step=epoch)
+            if save_scheckpoint:
+                checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
+                model.saver.save(sess, checkpoint_path, global_step=epoch)
+
+            epoch += 1
 
         if validation_set is not None:
-            final_loss, final_acc, final_cf, _ = _evaluate(sess, model, validation_set, verbose=verbose)
+            if verbose:
+                print('\r{}: Final validation set evaluation...'.format(datetime.now()), end='')
+            final_loss, final_acc, final_cf, _ = _evaluate(sess, model, validation_set, verbose=verbose, return_confusion_matrix=True)
+
+        if verbose:
+            print('\r{}: Final train set evaluation...'.format(datetime.now()), end='')
+        _, _, final_train_cf, _ = _evaluate(sess, model, dataset, verbose=False, return_confusion_matrix=True)
 
         checkpoint_path = os.path.join(FLAGS.checkpoint_dir, 'model.ckpt')
         model.saver.save(sess, checkpoint_path, global_step=global_step)
 
-        print('\rPlotting weights', end='')
-        w_tensor = tf.get_default_graph().get_tensor_by_name('conv1_weights:0')
-        plot_conv_weights(w_tensor, plot_path, sess, 'conv1')
-        w_tensor = tf.get_default_graph().get_tensor_by_name('conv2_weights:0')
-        plot_conv_weights(w_tensor, plot_path, sess, 'conv2')
+        if plot_path is not None:
+            print('\rPlotting weights', end='')
+            w_tensor = tf.get_default_graph().get_tensor_by_name('conv1_weights:0')
+            plot_conv_weights(w_tensor, plot_path, sess, 'conv1')
+            w_tensor = tf.get_default_graph().get_tensor_by_name('conv2_weights:0')
+            plot_conv_weights(w_tensor, plot_path, sess, 'conv2')
 
     if verbose:
         print('\r{}: Training finished'.format(datetime.now()))
@@ -118,6 +172,10 @@ def train(dataset, model, epochs, validation_set=None, verbose=True, eval_step=N
             validation_stats['acc_series'] = validation_accuracy
             train_stats['loss_series'] = train_loss
             train_stats['acc_series'] = train_accuracy
+        if early_stopping:
+            validation_stats['min_loss_epoch'] = min_loss_epoch
+
+    train_stats['cf'] = final_train_cf
 
     """
     if validation_set is not None and validation_stats is not None:
@@ -149,7 +207,7 @@ def plot_conv_weights(weights, out_dir, session, name):
     w_min = np.min(w)
     w_max = np.max(w)
 
-    if w_min < 0 and w_max > 0:
+    if w_min < 0 < w_max:
         cmap = 'seismic'
         vmax = max([abs(w_min), w_max])
         vmin = -vmax
@@ -167,7 +225,7 @@ def plot_conv_weights(weights, out_dir, session, name):
     for channel in xrange(w.shape[2]):
         for i, ax in enumerate(axes.flat):
             img = w[:, :, channel, i]
-            ax.imshow(img, vmin=vmin, vmax=vmax, interpolation='nearest', cmap='seismic')
+            ax.imshow(img, vmin=vmin, vmax=vmax, interpolation='nearest', cmap=cmap)
             ax.set_xticks([])
             ax.set_yticks([])
         plt.savefig(os.path.join(out_dir, '{}-{}.png'.format(name, channel)), bbox_inches='tight')

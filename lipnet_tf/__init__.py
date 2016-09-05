@@ -8,3 +8,4 @@ tf.app.flags.DEFINE_integer('max_steps', 1000000, """Maximum number of training 
 tf.app.flags.DEFINE_boolean('log_device_placement', False, """Whether to log device placement""")
 tf.app.flags.DEFINE_integer('image_width', 28, """Width of input images""")
 tf.app.flags.DEFINE_integer('image_height', 28, """Height of input images""")
+tf.app.flags.DEFINE_integer('global_step', 0, """Global step for writing summaries""")

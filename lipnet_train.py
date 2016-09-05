@@ -7,9 +7,18 @@ from datetime import datetime
 from helpers import *
 import csv
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 
 
-def train_on_real_images(problem_name, epochs, n_runs=1, do_validation=True, path_to_stats=None):
+def train_on_real_images(problem_name,
+                         epochs,
+                         run_id=1,
+                         do_validation=True,
+                         do_augmentation=True,
+                         do_intermediate_evaluations=False,
+                         plot_weights=False,
+                         early_stopping=False):
     """
     Train lipnet CNN with some framework. Currently only Tensorflow is supported
     :return:
@@ -17,86 +26,118 @@ def train_on_real_images(problem_name, epochs, n_runs=1, do_validation=True, pat
     dir = '/home/sergii/Documents/microscopic_data/{}/'
     path_to_json = dir + '{}_{}_set.json'
     path_to_img = dir + 'images/without_padding/'
+
     batch_size = 500
     FLAGS.batch_size = batch_size
     # create train set
-    train_set = DatasetPDAugmented(path_to_json.format(problem_name, problem_name, 'train'),
-                          path_to_img.format(problem_name),
-                          batch_size=batch_size,
-                          num_epochs=epochs,
-                                   smote_rates=[200, 200])
+    if do_augmentation:
+        train_set = DatasetPDAugmented.from_json(path_to_json.format(problem_name, problem_name, 'train'),
+                              path_to_img.format(problem_name),
+                              batch_size=batch_size,
+                              num_epochs=epochs,
+                                       smote_rates=[2, 100])
+    else:
+        train_set = DatasetPD.from_json(path_to_json.format(problem_name, problem_name, 'train'),
+                                                 path_to_img.format(problem_name),
+                                                 batch_size=batch_size,
+                                                 num_epochs=epochs)
 
     validation_set = None
     if do_validation:
-        validation_set = DatasetPD(path_to_json.format(problem_name, problem_name, 'validation'),
+        validation_set = DatasetPD.from_json(path_to_json.format(problem_name, problem_name, 'validation'),
                               path_to_img.format(problem_name),
                               batch_size=batch_size,
                               num_epochs=1)
 
     model = Model(3, la.layer_definitions)
 
-    stats = [None] * n_runs
-    for i in xrange(n_runs):
-        train_set.reset()
-        if validation_set is not None:
-            validation_set.reset()
-        print "{}: run {}...".format(datetime.now(), i+1)
-        train_stats = lptf.train(train_set, model, validation_set, verbose=True)
-        print train_stats
-        stats[i] = train_stats
+    plot_path = None
+    if plot_weights:
+        plot_path = './output/figures/{}/conv_weights/run_{}'.format(problem_name, run_id)
+        prepare_dir(plot_path, empty=True)
 
-    if path_to_stats is not None:
-        prepare_dir(os.path.dirname(path_to_stats))
-        with open(path_to_stats, 'wb') as f:
-            writer = csv.DictWriter(f, stats[0].keys(), delimiter=';')
-            writer.writeheader()
-            writer.writerows(stats)
+    train_stats, validation_stats = lptf.train(train_set,
+                                               model, epochs,
+                                               validation_set,
+                                               verbose=True,
+                                               intermediate_evaluation=do_intermediate_evaluations,
+                                               plot_path=plot_path,
+                                               early_stopping=early_stopping)
 
-
-def train_on_synthetic_images(path_to_json, path_to_img, epochs=50):
-    train_set = DatasetPD(path_to_json, path_to_img, batch_size=500, num_epochs=epochs)
-    model = Model(3, la.layer_definitions)
-    train_set.reset()
-    train_stats = lptf.train(train_set, model)
-
-
-def train_on_mixed_set(path, epochs):
-    """
-
-    :param path: list of dictionarier with keys 'path_to_json' and 'path_to_img'
-    :param epochs: int
-    :return:
-    """
-    data_set = DatasetPDAugmented(path[0]['path_to_json'], path[0]['path_to_img'],
-                                  batch_size=500, num_epochs=epochs, smote_rates=[2, 0])
-    for i in xrange(1, len(path)):
-        df = pd.read_json(path[i]['path_to_json'])
-        df['Image'] = path[i]['path_to_img'] + df['Image'].astype(str)
-        data_set.add_dataframe(df)
-    data_set.reset()
-    model = Model(3, la.layer_definitions)
-    train_stats = lptf.train(data_set, model)
+    return train_stats, validation_stats
 
 
 def main(argv=None):
-    problem_name = 'packiging'
-    path_to_stats = 'output/train_stats/{}/{}.csv'.format(problem_name, 'train-2-200')
-    train_on_real_images(problem_name, epochs=20, n_runs=1, path_to_stats=path_to_stats, do_validation=False)
-    #train_on_synthetic_images(path_to_json='./output/synthetic_examples/synthetic_particles.json',
-    #                          path_to_img='./output/synthetic_examples/synthetic_images',
-    #                          epochs=20)
-    path = [
-        {
-            'path_to_json': '/home/sergii/Documents/microscopic_data/lamellarity/lamellarity_train_set.json',
-            'path_to_img': '/home/sergii/Documents/microscopic_data/lamellarity/images/without_padding/'
-        },
-        {
-            'path_to_json': './output/synthetic_examples/lamellarity_uncertain/uncertain_particles.json',
-            'path_to_img': './output/synthetic_examples/lamellarity_uncertain/'
-        }
-    ]
-    #train_on_mixed_set(path, epochs=20)
+    # path
+    problem_name = 'lamellarity'
+    path_to_stats = 'output/train_stats/{}/{}.csv'.format(problem_name, 'train-2-200_early_stopping')
+    path_to_fig = './output/figures/{}/training'.format(problem_name)
 
+    # flags
+    plot_loss_acc = False
+    save_stats = True
+    plot_weights = False
+    interm_eval = False
+    early_stopping = True
+    n_runs = 1
+    epochs = 100
+
+    stats_validation = [None] * n_runs
+    stats_train = [None] * n_runs
+
+    for run_id in xrange(n_runs):
+        print "{}: run {}...".format(datetime.now(), run_id + 1)
+        train_stats, validation_stats = train_on_real_images(problem_name,
+                                                             epochs=epochs,
+                                                             run_id=run_id + 1,
+                                                             do_validation=True,
+                                                             do_augmentation=True,
+                                                             plot_weights=plot_weights,
+                                                             do_intermediate_evaluations=interm_eval,
+                                                             early_stopping=early_stopping)
+        stats_validation[run_id] = validation_stats
+        stats_train[run_id] = train_stats
+
+        if plot_loss_acc:
+            prepare_dir(path_to_fig, empty=True)
+            xticks = np.arange(1, epochs + 1, 1)
+            # plot loss
+            plt.clf()
+            plt.plot(xticks, train_stats['loss_series'])
+            plt.plot(xticks, validation_stats['loss_series'])
+            axes = plt.gca()
+            axes.set_ylim([0, max([max(train_stats['loss_series']), max(validation_stats['loss_series'])]) * 1.1])
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend(['Train', 'Validation'], loc='upper right')
+            plt.savefig(os.path.join(path_to_fig, 'loss_{}.png'.format(run_id + 1)), bbox_inches='tight')
+
+            # plot accuracy
+            plt.clf()
+            plt.plot(xticks, train_stats['acc_series'])
+            plt.plot(xticks, validation_stats['acc_series'])
+            axes = plt.gca()
+            axes.set_ylim([0, 1])
+            plt.xticks(xticks)
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.legend(['Train', 'Validation'], loc='lower right')
+            plt.savefig(os.path.join(path_to_fig, 'accuracy_{}.png'.format(run_id + 1)), bbox_inches='tight')
+
+    if save_stats:
+        prepare_dir(os.path.dirname(path_to_stats))
+        with open(path_to_stats, 'wb') as f:
+            writer = csv.writer(f, delimiter=';')
+            writer.writerow(['Run', 'Loss', 'Accuracy', 'Confusion matrix validation', 'Min loss epoch',
+                             'Confusion matrix training'])
+            for i in xrange(len(stats_validation)):
+                writer.writerow([i + 1,
+                                 '{:.4f}'.format(stats_validation[i]['loss']),
+                                 '{:.4f}'.format(stats_validation[i]['acc']),
+                                 stats_validation[i]['cf'].as_str,
+                                '{}'.format(stats_validation[i].get('min_loss_epoch', 'n/a')),
+                                '{}'.format(stats_train[i]['cf'].as_str)]
+                                )
 
 
 if __name__ == '__main__':

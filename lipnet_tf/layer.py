@@ -4,20 +4,6 @@ from abc import abstractmethod
 import math
 
 
-def prime_powers(n):
-    """
-    Compute the factors of a positive integer
-    from https://rosettacode.org/wiki/Factors_of_an_integer#Python
-    :param n: int
-    :return: set
-    """
-    factors = set()
-    for x in xrange(1, int(math.sqrt(n)) +1):
-        if n % x == 0:
-            factors.add(int(x))
-            factors.add(int(n // x))
-    return sorted(factors)
-
 class LayerAbstract(object):
 
     @staticmethod
@@ -42,6 +28,18 @@ class LayerAbstract(object):
             tf.scalar_summary(name + 'min', tf.reduce_min(var))
             tf.histogram_summary(name, var)
 
+    @staticmethod
+    def weight_decay(var, wd):
+        """
+        Add weight decay operation to a Tensor
+        :param var: Tensor
+        :param wd: float
+        :return: nothing, weight decay op is added to 'weight_losses' collection
+        """
+        pass
+        #weight_decay = tf.mul(tf.nn.l2_loss(var), wd, name='weight_loss')
+        #tf.add_to_collection('weight_losses', weight_decay)
+
 
 class LayerConv2d(LayerAbstract):
 
@@ -58,6 +56,7 @@ class LayerConv2d(LayerAbstract):
         with tf.name_scope(name):
             with tf.name_scope('Weights') as scope:
                 weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]), name='{}_weights'.format(name))
+                cls.weight_decay(weights, 0.004)
                 cls.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
                 biases = tf.Variable(tf.random_normal([filter_num]))
@@ -137,6 +136,7 @@ class LayerFullyConnected(LayerAbstract):
         with tf.name_scope(name) as layer_scope:
             with tf.name_scope('Weights') as scope:
                 weights = tf.Variable(tf.random_normal([n, nodes]))
+                cls.weight_decay(weights, 0.004)
                 LayerAbstract.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
                 biases = tf.Variable(tf.random_normal([nodes]))
@@ -158,6 +158,7 @@ class LayerOutput(LayerFullyConnected):
         """
         with tf.name_scope(name) as layer_scope:
             fc = super(LayerOutput, cls).apply(layer_scope, x, nodes, None, keep_prob=None)
+            #out = fc
             max_logits = tf.reduce_max(tf.abs(fc), reduction_indices=[1])
             max_logits = tf.tile(max_logits, [nodes])
             max_logits = tf.reshape(max_logits, (nodes, -1))
