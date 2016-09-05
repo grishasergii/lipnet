@@ -106,6 +106,12 @@ class DatasetPD(DatasetAbstract):
             self._df = pd.concat([self._df, pd.get_dummies(self._df['Class'], prefix='Label')], axis=1)
             self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
 
+        # do label smoothing
+        # as described in Deep Learning book section 7.5.1
+        eps = 0.1
+        ix = self._class_columns
+        self._df[ix] = self._df[ix] * (1 - eps) + (1 - self._df[ix]) * eps / (len(ix) - 1)
+
         self.num_epochs = num_epochs
         self._epoch_count = 0
         self._image_height = image_height

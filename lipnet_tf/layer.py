@@ -55,11 +55,12 @@ class LayerConv2d(LayerAbstract):
         channels = x.get_shape()[3].value
         with tf.name_scope(name):
             with tf.name_scope('Weights') as scope:
-                weights = tf.Variable(tf.random_normal(filter_shape + [channels, filter_num]), name='{}_weights'.format(name))
+                weights = tf.Variable(tf.random_normal(shape=filter_shape + [channels, filter_num], stddev=0.05),
+                                      name='{}_weights'.format(name))
                 cls.weight_decay(weights, 0.004)
                 cls.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
-                biases = tf.Variable(tf.random_normal([filter_num]))
+                biases = tf.Variable(tf.random_normal(shape=[filter_num], stddev=0.05))
                 cls.variable_summaries(biases, scope)
             with tf.name_scope('Preactivations') as scope:
                 preactivations = tf.nn.conv2d(x, weights, strides=[1, stride, stride, 1], padding='SAME')
@@ -135,11 +136,11 @@ class LayerFullyConnected(LayerAbstract):
         n = x.get_shape()[1].value
         with tf.name_scope(name) as layer_scope:
             with tf.name_scope('Weights') as scope:
-                weights = tf.Variable(tf.random_normal([n, nodes]))
+                weights = tf.Variable(tf.random_normal([n, nodes], stddev=0.05))
                 cls.weight_decay(weights, 0.004)
                 LayerAbstract.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
-                biases = tf.Variable(tf.random_normal([nodes]))
+                biases = tf.Variable(tf.random_normal([nodes], stddev=0.05))
                 LayerAbstract.variable_summaries(biases, scope)
             fc = cls._get_output(layer_scope, x, weights, biases, activation_function, keep_prob)
         return fc
@@ -158,13 +159,13 @@ class LayerOutput(LayerFullyConnected):
         """
         with tf.name_scope(name) as layer_scope:
             fc = super(LayerOutput, cls).apply(layer_scope, x, nodes, None, keep_prob=None)
-            #out = fc
-            max_logits = tf.reduce_max(tf.abs(fc), reduction_indices=[1])
-            max_logits = tf.tile(max_logits, [nodes])
-            max_logits = tf.reshape(max_logits, (nodes, -1))
-            max_logits = tf.transpose(max_logits)
+            out = fc
+            #max_logits = tf.reduce_max(tf.abs(fc), reduction_indices=[1])
+            #max_logits = tf.tile(max_logits, [nodes])
+            #max_logits = tf.reshape(max_logits, (nodes, -1))
+            #max_logits = tf.transpose(max_logits)
             with tf.name_scope('Scaled_activations') as scope:
-                out = tf.div(fc, max_logits)
+                #out = tf.div(fc, max_logits)
                 LayerAbstract.variable_summaries(out, scope)
         return out
 

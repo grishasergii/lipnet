@@ -57,9 +57,9 @@ def evaluate(dataset, model, session=None, do_restore=True, verbose=True, return
             loss += batch_loss * batch.size
             acc += batch_acc * batch.size
             examples_count += batch.size
-        if summary_writer is not None:
-            summary_writer.add_summary(summary, FLAGS.global_step)
-            FLAGS.global_step += 1
+            if summary_writer is not None:
+                summary_writer.add_summary(summary, FLAGS.global_step)
+                FLAGS.global_step += 1
 
         loss /= examples_count
         acc /= examples_count
