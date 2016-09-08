@@ -298,6 +298,17 @@ class DatasetPD(DatasetAbstract):
         plt.legend(loc="lower right")
         plt.show()
 
+    def get_image_by_id(self, id):
+        """
+        Returns real (not synthetic) image matching provided id
+        :param name: int
+        :return: numpy array
+        """
+        img_name = self._df[self._df.Id == id].Image.values[0]
+        img = self._read_image(img_name)
+        img = np.reshape(img, (1, self._image_width, self._image_height, 1))
+        return img
+
 
 class DatasetPDFeatures(DatasetPD):
 
@@ -433,17 +444,34 @@ class DatasetPDAugmented(DatasetPD):
         :param class_names: string or list of strings, name(s) of class to be augmented
         :return: nothing, new examples as a result of augmentation are stored in self._df_synthetic
         """
-        n = self._df['Id'][self._df['Class'].isin(class_names)].count() * 3
+        n = self._df['Id'][self._df['Class'].isin(class_names)].count() * 7
         df = pd.DataFrame(index=np.arange(0, n), columns=self._df_synthetic.columns.values)
         i = -1
         for _, example in self._df[self._df['Class'].isin(class_names)].iterrows():
+            # read original image
             image = self._read_image(example.Image)
-            for j in xrange(3):
+            # flip image
+            image_flipped = np.fliplr(image)
+            i += 1
+            df.loc[i].Id = '{}_{}'.format(example.Id, 0)
+            df.loc[i].Image = image_flipped
+            df.loc[i][self._class_columns] = example[self._class_columns]
+
+            # rotate image and flipped image 90, 180, 270 degrees
+            for j in xrange(1, 4):
                 image = np.rot90(image)
+                image_flipped = np.rot90(image_flipped)
+                # save rotated image to df
                 i += 1
                 df.loc[i].Id = '{}_{}'.format(example.Id, j)
                 df.loc[i].Image = image
                 df.loc[i][self._class_columns] = example[self._class_columns]
+                # save rotated flipped image to df
+                i += 1
+                df.loc[i].Id = '{}_{}'.format(example.Id, j + 3)
+                df.loc[i].Image = image_flipped
+                df.loc[i][self._class_columns] = example[self._class_columns]
+
         self._df_synthetic = self._df_synthetic.append(df, ignore_index=True)
 
     def _save_synthetic_examples(self, examples, parents, parent_ids, class_name):
