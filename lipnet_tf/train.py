@@ -4,10 +4,7 @@ import tensorflow as tf
 import os.path
 from evaluate import evaluate
 from datetime import datetime
-import numpy as np
-import math
-from collections import OrderedDict
-import matplotlib.pyplot as plt
+import plot
 
 
 def prepare_dir(directory):
@@ -64,7 +61,7 @@ def train(dataset,
     validation_loss = [0] * epochs
 
     # early stopping
-    max_epochs_without_improvement = 20
+    max_epochs_without_improvement = 30
     epochs_witout_improvement = 0
     min_validation_loss = 999999
     min_loss_epoch = -1
@@ -90,7 +87,7 @@ def train(dataset,
                 sess.run(model.optimizer, feed_dict={model.x: batch_x,
                                                      model.y: batch_y,
                                                      model.keep_prob: model.dropout,
-                                                     model.learning_rate: 0.001})
+                                                     model.learning_rate: 0.0001})
 
             # evaluate training set
             if intermediate_evaluation:
@@ -148,10 +145,13 @@ def train(dataset,
 
         if plot_path is not None:
             print('\rPlotting weights', end='')
-            w_tensor = tf.get_default_graph().get_tensor_by_name('conv1_weights:0')
-            plot_conv_weights(w_tensor, plot_path, sess, 'conv1')
-            w_tensor = tf.get_default_graph().get_tensor_by_name('conv2_weights:0')
-            plot_conv_weights(w_tensor, plot_path, sess, 'conv2')
+            weights = sess.run([tf.get_collection('conv_weights')])
+            for i, w in enumerate(weights[0]):
+                plot.plot_conv_weights(w, 'conv{}'.format(i + 1), plot_path)
+
+            conv_out = sess.run([tf.get_collection('conv_output')], feed_dict={model.x: dataset.get_image_by_id(543005)})
+            for i, c in enumerate(conv_out[0]):
+                plot.plot_conv_output(c, 'conv{}'.format(i + 1), plot_path)
 
     if verbose:
         print('\r{}: Training finished'.format(datetime.now()))
@@ -190,72 +190,3 @@ def train(dataset,
         output["z_confusion_matrix_max_acc"] = ["%.2f" % x for x in validation_cf[max_validation_acc_i, :]]
     """
     return train_stats, validation_stats
-
-
-def plot_conv_weights(weights, out_dir, session, name):
-    """
-    Plot weights of convolutional layer
-    From https://github.com/Hvass-Labs/TensorFlow-Tutorials/blob/master/02_Convolutional_Neural_Network.ipynb
-    :param weights: Tensorflow op
-    :param out_dir: string, folder where plot will be saved
-    :param session: Tensorflow session
-    :param name: string, tensor name, plots are named as tensor
-    :return: nothing, plot is saved to out_dir
-    """
-    w = session.run(weights)
-
-    w_min = np.min(w)
-    w_max = np.max(w)
-
-    if w_min < 0 < w_max:
-        cmap = 'seismic'
-        vmax = max([abs(w_min), w_max])
-        vmin = -vmax
-    else:
-        cmap = 'Greys'
-        vmin = w_min
-        vmax = w_max
-
-    num_filters = w.shape[3]
-    grid_x, grid_y = _get_grid_dim(num_filters)
-
-    fig, axes = plt.subplots(min([grid_x, grid_y]),
-                             max([grid_x, grid_y]))
-
-    for channel in xrange(w.shape[2]):
-        for i, ax in enumerate(axes.flat):
-            img = w[:, :, channel, i]
-            ax.imshow(img, vmin=vmin, vmax=vmax, interpolation='nearest', cmap=cmap)
-            ax.set_xticks([])
-            ax.set_yticks([])
-        plt.savefig(os.path.join(out_dir, '{}-{}.png'.format(name, channel)), bbox_inches='tight')
-
-
-def _get_grid_dim(x):
-    """
-    Transforms x into product of two integers
-    :param x: int
-    :return: two ints
-    """
-    factors = prime_powers(x)
-    if len(factors) % 2 == 0:
-        i = int(len(factors) / 2)
-        return factors[i], factors[i - 1]
-
-    i = len(factors) // 2
-    return factors[i], factors[i]
-
-
-def prime_powers(n):
-    """
-    Compute the factors of a positive integer
-    from https://rosettacode.org/wiki/Factors_of_an_integer#Python
-    :param n: int
-    :return: set
-    """
-    factors = set()
-    for x in xrange(1, int(math.sqrt(n)) +1):
-        if n % x == 0:
-            factors.add(int(x))
-            factors.add(int(n // x))
-    return sorted(factors)

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from layer import *
 from lipnet_architecture import *
-from . import FLAGS
+from lipnet_tf import FLAGS
 
 
 class Model(object):
@@ -38,17 +38,21 @@ class Model(object):
                 # loss_batch function
                 self.loss_batch = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, self.y))
                 tf.scalar_summary(scope, self.loss_batch)
-            """
+            #"""
             with tf.name_scope('Weights_loss') as scope:
-                self.loss_weights = tf.add_n(tf.get_collection('weight_losses'))
+                weight_loss_list = tf.get_collection('weight_losses')
+                if len(weight_loss_list) > 0:
+                    self.loss_weights = tf.add_n()
+                else:
+                    self.loss_weights = 0
                 tf.scalar_summary(scope, self.loss_weights)
             with tf.name_scope('Total_loss') as scope:
                 self.loss_total = tf.add(self.loss_batch, self.loss_weights)
                 tf.scalar_summary(scope, self.loss_total)
-            """
+            #"""
 
         # optimizer
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_batch)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_total)
 
         self.init = tf.initialize_all_variables()
         self.saver = tf.train.Saver()

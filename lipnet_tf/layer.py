@@ -37,8 +37,8 @@ class LayerAbstract(object):
         :return: nothing, weight decay op is added to 'weight_losses' collection
         """
         pass
-        #weight_decay = tf.mul(tf.nn.l2_loss(var), wd, name='weight_loss')
-        #tf.add_to_collection('weight_losses', weight_decay)
+        weight_decay = tf.mul(tf.nn.l2_loss(var), wd, name='weight_loss')
+        tf.add_to_collection('weight_losses', weight_decay)
 
 
 class LayerConv2d(LayerAbstract):
@@ -57,7 +57,8 @@ class LayerConv2d(LayerAbstract):
             with tf.name_scope('Weights') as scope:
                 weights = tf.Variable(tf.random_normal(shape=filter_shape + [channels, filter_num], stddev=0.05),
                                       name='{}_weights'.format(name))
-                cls.weight_decay(weights, 0.004)
+                tf.add_to_collection('conv_weights', weights)
+                #cls.weight_decay(weights, 0.004)
                 cls.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
                 biases = tf.Variable(tf.random_normal(shape=[filter_num], stddev=0.05))
@@ -69,6 +70,7 @@ class LayerConv2d(LayerAbstract):
             with tf.name_scope('Activations') as scope:
                 activations = tf.nn.relu(preactivations)
                 cls.variable_summaries(activations, scope)
+                tf.add_to_collection('conv_output', activations)
         return activations
 
 
@@ -137,7 +139,7 @@ class LayerFullyConnected(LayerAbstract):
         with tf.name_scope(name) as layer_scope:
             with tf.name_scope('Weights') as scope:
                 weights = tf.Variable(tf.random_normal([n, nodes], stddev=0.05))
-                cls.weight_decay(weights, 0.004)
+                #cls.weight_decay(weights, 0.004)
                 LayerAbstract.variable_summaries(weights, scope)
             with tf.name_scope('Biases') as scope:
                 biases = tf.Variable(tf.random_normal([nodes], stddev=0.05))
