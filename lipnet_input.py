@@ -5,6 +5,56 @@ import os
 import os.path
 import re
 import math
+from lipnet_dataset import DatasetPDAugmented, DatasetPD, DatasetPDFeatures
+from dataset import dataset
+
+
+dir = '/home/sergii/Documents/microscopic_data/{}/'
+path_to_json = dir + '{}_{}_set.json'
+path_to_img = dir + 'images/without_padding/'
+
+
+def get_dataset_images(problem_name, set_name, batch_size=500, smote_rates=None):
+    """
+    Creates dataset
+    :param problem_name: string, 'lamelllarity' or 'packiging'
+    :param set_name: string, 'test' or 'train' or 'validation'
+    :return: Dataset object
+    """
+    if smote_rates is not None:
+        return DatasetPDAugmented.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                            path_to_img.format(problem_name),
+                                            batch_size=batch_size,
+                                            smote_rates=smote_rates)
+    else:
+        return DatasetPD.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                   path_to_img.format(problem_name),
+                                   batch_size=batch_size)
+
+
+def get_dataset_features(problem_name, set_name, do_oversampling, batch_size=500):
+    """
+    Creates dataset
+    :param problem_name: string, 'lamelllarity' or 'packiging'
+    :param set_name: string, 'test' or 'train' or 'validation'
+    :return: Dataset object
+    """
+    return dataset.DatasetFeatures.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                             batch_size=batch_size,
+                                             do_oversampling=do_oversampling)
+
+
+def get_dataset_edp(problem_name, set_name, do_oversampling, batch_size=500):
+    return dataset.DatasetEDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                             batch_size=batch_size,
+                                             do_oversampling=do_oversampling)
+
+
+def get_dataset_rdp(problem_name, set_name, do_oversampling, batch_size=500):
+    return dataset.DatasetRDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                             batch_size=batch_size,
+                                             do_oversampling=do_oversampling)
+
 
 
 def repair_json(in_file, out_file, path_to_img):
