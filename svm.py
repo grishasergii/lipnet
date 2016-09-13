@@ -4,33 +4,42 @@ import numpy as np
 from confusion_matrix import ConfusionMatrix
 
 
-problem_name = 'packiging'
+def svm(train_set, test_set):
+    clf = SVC(class_weight='balanced')
 
-train_set = lipnet_input.get_dataset_rdp(problem_name=problem_name,
-                                         set_name='train',
-                                         do_oversampling=False,
-                                         batch_size=None)
+    x = train_set._df[train_set.feature_names].values
+    y = np.argmax(train_set._df[train_set._class_columns].values, axis=1)
 
-test_set = lipnet_input.get_dataset_rdp(problem_name=problem_name,
-                                        set_name='test',
-                                        do_oversampling=False,
-                                        batch_size=None)
+    clf.fit(x, y)
 
-clf = SVC(class_weight='balanced')
+    x = test_set._df[test_set.feature_names].values
+    y = test_set._df[test_set._class_columns].values
 
-x = train_set._df[train_set.feature_names].values
-y = np.argmax(train_set._df[train_set._class_columns].values, axis=1)
+    y_ = clf.predict(x)
+    pred = np.zeros([len(y_), len(test_set._class_columns)])
+    for i, j in enumerate(y_):
+        pred[i, j] = 1
 
-clf.fit(x, y)
+    cf = ConfusionMatrix(pred, y, class_names=test_set.class_names)
+    return cf
 
-x = test_set._df[test_set.feature_names].values
-y = test_set._df[test_set._class_columns].values
 
-y_ = clf.predict(x)
-pred = np.zeros([len(y_), len(test_set._class_columns)])
-for i, j in enumerate(y_):
-    pred[i, j] = 1
+def main():
+    problem_name = 'packiging'
 
-cf = ConfusionMatrix(pred, y)
+    train_set = lipnet_input.get_dataset_vironova_svm(problem_name=problem_name,
+                                                      set_name='train',
+                                                      do_oversampling=False,
+                                                      batch_size=None)
 
-print cf.as_str
+    test_set = lipnet_input.get_dataset_vironova_svm(problem_name=problem_name,
+                                                     set_name='test',
+                                                     do_oversampling=False,
+                                                     batch_size=None)
+
+    cf = svm(train_set, test_set)
+    print cf.as_str
+
+
+if __name__ == '__main__':
+    main()

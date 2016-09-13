@@ -48,8 +48,13 @@ class ConfusionTable:
             self.false_discovery_rate = 1 - self.precision
             self.miss_rate = 1 - self.sensitivity
         except ZeroDivisionError:
-            pass
-
+            self.sensitivity = 0
+            self.specificity = 0
+            self.precision = 0
+            self.negative_predictive_value = 0
+            self.false_positive_rate = 0
+            self.false_discovery_rate = 0
+            self.miss_rate = 0
 
     def __str__(self):
         return '%s tp: %0.4f tn: %0.4f fp: %0.4f fn: %0.4f' % (self.name,
@@ -65,7 +70,7 @@ class ConfusionMatrix:
     Based on numpy
     """
 
-    def __flatten_one_hot(self, v):
+    def _flatten_one_hot(self, v):
         """
 
         :param v:
@@ -99,8 +104,8 @@ class ConfusionMatrix:
         self._num_examples = predictions.shape[0]
 
         # flatten one hot encoded predictions and labels
-        _predictions = self.__flatten_one_hot(predictions)
-        _labels = self.__flatten_one_hot(true_labels)
+        _predictions = self._flatten_one_hot(predictions)
+        _labels = self._flatten_one_hot(true_labels)
 
         # create placeholder for confusion matrix
         self._confusion_matrix = np.zeros([self._num_classes, self._num_classes])
@@ -116,9 +121,9 @@ class ConfusionMatrix:
         self._confusion_matrix_normalized = self._confusion_matrix / row_sums
 
         # create confusion tables for each class
-        self.confusion_tables = {}
+        self.confusion_tables = [None] * self._num_classes
         for i in xrange(self._num_classes):
-            self.confusion_tables[self._class_names[i]] = \
+            self.confusion_tables[i] = \
                 ConfusionTable(_predictions, _labels, i, name=self._class_names[i])
             #print self.confusion_tables[self._class_names[i]]
 

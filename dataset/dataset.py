@@ -39,6 +39,10 @@ class DatasetBasic(object):
             self._df = pd.concat([self._df, pd.get_dummies(self._df['Class'], prefix='Label')], axis=1)
             self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
 
+        self.class_names = [None] * len(self._class_columns)
+        for i, class_name in enumerate(self._class_columns):
+            self.class_names[i] = class_name.split('_')[1]
+
         # do label smoothing
         # as described in Deep Learning book section 7.5.1
         eps = 0.1
@@ -176,6 +180,62 @@ class DatasetFeatures(DatasetBasic):
             self._df = self._df.append(df, ignore_index=True)
             new_id += n
 
+    def _resample_rdp(self, n):
+        """
+        Resample Radial Density Profile
+        :param n: int
+        :return: nothing
+        """
+        columns = []
+        for i in xrange(n):
+            columns += ['edp_{}'.format(i)]
+        self.feature_names += columns
+
+        # edp = [None] * len(self._df)
+        edp = np.zeros([len(self._df), n])
+        for i, v in enumerate(self._df.RadialDensityProfile.values):
+            x = np.zeros([len(v)])
+            for j, v_ in enumerate(v):
+                x[j] = v_[0]
+            edp[i] = signal.resample(x, n)
+        df = pd.DataFrame(data=edp, columns=columns, index=self._df.index)
+        self._df = pd.concat([self._df, df], axis=1)
+
+    def _resample_edp(self, n):
+        """
+        Resample Edge Density Profile
+        :param n: int
+        :return: nothing
+        """
+        columns = []
+        for i in xrange(n):
+            columns += ['edp_{}'.format(i)]
+        self.feature_names += columns
+
+        # edp = [None] * len(self._df)
+        rdp = np.zeros([len(self._df), n])
+        for i, v in enumerate(self._df.EdgeDensityProfile.values):
+            x = np.zeros([len(v)])
+            for j, v_ in enumerate(v):
+                x[j] = v_[0]
+            rdp[i] = signal.resample(x, n)
+        df = pd.DataFrame(data=rdp, columns=columns, index=self._df.index)
+        self._df = pd.concat([self._df, df], axis=1)
+
+    def _transform_histogram(self):
+        h_n = len(self._df.Histogram.values[0])
+        columns = []
+        for i in xrange(h_n):
+            columns += ['histogram_{}'.format(i)]
+
+        histogram = np.zeros([len(self._df), h_n])
+        for i, v in enumerate(self._df.Histogram.values):
+            histogram[i] = np.array(v)
+        df = pd.DataFrame(columns=columns, data=histogram, index=self._df.index)
+        self._df = pd.concat([self._df, df], axis=1)
+
+        self.feature_names += columns
+
 
 class DatasetEDP(DatasetFeatures):
 
@@ -185,23 +245,7 @@ class DatasetEDP(DatasetFeatures):
         self.do_oversampling = do_oversampling
         self.feature_names = []
         self._n_sample = 69
-        for i in xrange(self._n_sample):
-            self.feature_names += ['edp_{}'.format(i)]
-
-        # edp = [None] * len(self._df)
-        edp = np.zeros([len(self._df), self._n_sample])
-        for i, v in enumerate(self._df.EdgeDensityProfile.values):
-            x = np.zeros([len(v)])
-            for j, v_ in enumerate(v):
-                x[j] = v_[0]
-            edp[i] = signal.resample(x, self._n_sample)
-        df = pd.DataFrame(data=edp, columns=self.feature_names, index=self._df.index)
-        self._df = pd.concat([self._df, df], axis=1)
-        pass
-
-    @property
-    def input_shape(self):
-        return [self._n_sample]
+        self._resample_edp(self._n_sample)
 
 
 class DatasetRDP(DatasetFeatures):
@@ -212,24 +256,35 @@ class DatasetRDP(DatasetFeatures):
         self.do_oversampling = do_oversampling
         self.feature_names = []
         self._n_sample = 69
-        for i in xrange(self._n_sample):
-            self.feature_names += ['edp_{}'.format(i)]
-
-        # edp = [None] * len(self._df)
-        edp = np.zeros([len(self._df), self._n_sample])
-        for i, v in enumerate(self._df.RadialDensityProfile.values):
-            x = np.zeros([len(v)])
-            for j, v_ in enumerate(v):
-                x[j] = v_[0]
-            edp[i] = signal.resample(x, self._n_sample)
-        df = pd.DataFrame(data=edp, columns=self.feature_names, index=self._df.index)
-        self._df = pd.concat([self._df, df], axis=1)
-        pass
+        self._resample_rdp(self._n_sample)
 
     @property
     def input_shape(self):
         return [self._n_sample]
 
 
+class DatasetVironovaSVM(DatasetFeatures):
 
+    def __init__(self, df, batch_size=None, do_oversampling=True):
+        super(DatasetVironovaSVM, self).__init__(df,
+                                                 batch_size=batch_size,
+                                                 do_oversampling=do_oversampling)
+
+        self.do_oversampling = do_oversampling
+        self.feature_names = ['Area',
+                              'Circularity',
+                              'M20',
+                              'M02',
+                              'M30',
+                              'M03']
+        self._n_sample = 80
+
+        self._resample_edp(self._n_sample)
+        #self._transform_histogram()
+
+        pass
+
+    @property
+    def input_shape(self):
+        return [len(self.feature_names)]
 
