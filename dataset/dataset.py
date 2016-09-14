@@ -33,15 +33,16 @@ class DatasetBasic(object):
     def __init__(self, df, batch_size=None):
         self._df = df.copy()
 
+        # replace class names with integers
+        self._df['Class'] = self._df['Class'].replace(to_replace=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty',
+                                                                 'Full'],
+                                                      value=[0, 1, 2, 0, 1])
+
         # prepare class columns
         self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
         if len(self._class_columns) == 0:
             self._df = pd.concat([self._df, pd.get_dummies(self._df['Class'], prefix='Label')], axis=1)
             self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
-
-        self.class_names = [None] * len(self._class_columns)
-        for i, class_name in enumerate(self._class_columns):
-            self.class_names[i] = class_name.split('_')[1]
 
         # do label smoothing
         # as described in Deep Learning book section 7.5.1
@@ -80,6 +81,11 @@ class DatasetBasic(object):
     def input_shape(self):
         return None
 
+    @property
+    def balanced_class_weights(self):
+        n_samples = len(self._df)
+        return float(n_samples) / (self.num_classes * np.bincount(self._df.Class.values))
+
     def iterate_minibatches(self, shuffle_=False):
         ids = self._df.Id.values.copy()
         if shuffle_:
@@ -94,6 +100,14 @@ class DatasetBasic(object):
     @abstractmethod
     def _get_batch(self, ids):
         pass
+
+    @property
+    def x(self):
+        return []
+
+    @property
+    def y(self):
+        return self._df['Class'].values.copy()
 
     def set_predictions(self, ids, predictions):
         """
