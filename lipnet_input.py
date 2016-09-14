@@ -7,6 +7,7 @@ import re
 import math
 from lipnet_dataset import DatasetPDAugmented, DatasetPD, DatasetPDFeatures
 from dataset import dataset
+from dataset import dataset_images
 
 
 dir = '/home/sergii/Documents/microscopic_data/{}/'
@@ -46,15 +47,27 @@ def get_dataset_features(problem_name, set_name, do_oversampling, batch_size=500
 
 def get_dataset_edp(problem_name, set_name, do_oversampling, batch_size=500):
     return dataset.DatasetEDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                             batch_size=batch_size,
-                                             do_oversampling=do_oversampling)
+                                        batch_size=batch_size,
+                                        do_oversampling=do_oversampling)
 
 
 def get_dataset_rdp(problem_name, set_name, do_oversampling, batch_size=500):
     return dataset.DatasetRDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                             batch_size=batch_size,
-                                             do_oversampling=do_oversampling)
+                                        batch_size=batch_size,
+                                        do_oversampling=do_oversampling)
 
+
+def get_dataset_vironova_svm(problem_name, set_name, do_oversampling, batch_size=500):
+    return dataset.DatasetVironovaSVM.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                                batch_size=batch_size,
+                                                do_oversampling=do_oversampling)
+
+
+def get_dataset_images_keras(problem_name, set_name, do_oversampling, img_size):
+    return dataset_images.DatasetImages.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                                  path_to_img.format(problem_name, problem_name, set_name),
+                                                  #do_oversampling=do_oversampling,
+                                                  img_size=img_size)
 
 
 def repair_json(in_file, out_file, path_to_img):
