@@ -6,11 +6,33 @@ import os
 import csv
 import svm
 from dataset.dataset import DatasetVironovaSVM
+from dataset.dataset_images import DatasetImages
 import numpy as np
+from lipnet_keras.model_cnn import cnn
 
 
 path_to_json = '/home/sergii/Documents/microscopic_data/{}/particles_repaired.json'
 path_to_img_without_padding = '/home/sergii/Documents/microscopic_data/{}/images/without_padding/'
+stats_path = 'output/stats/kfold/{}/{}.csv'
+problems = [
+    ('packiging', ['Empty', 'Full', 'Uncertain']),
+    ('lamellarity', ['Unilamellar', 'Multilamellar', 'Uncertain'])
+]
+
+
+def cnn_fold(k, path_to_json, path_to_img, epochs=10, verbose=False):
+    kfold = KFold(k, path_to_json, path_to_img)
+    stats = [None] * 5
+    for i in xrange(k):
+        print '{}: Fold {} of {}'.format(datetime.now(), i + 1, k)
+        train_df, test_df = kfold.get_datasets(i)
+        train_set = DatasetImages(train_df, (28, 28))
+        train_set.oversample()
+        test_set = DatasetImages(test_df, (28, 28))
+        stats[i] = cnn(train_set, test_set,
+                       nb_epoch=epochs,
+                       verbose=verbose)
+    return stats
 
 
 def svm_folds(k, path_to_json):
@@ -74,20 +96,24 @@ def save_stats(cf_matrices, out_path):
 
 
 def validate_cnn():
-    problems = {
-        #'packiging': [100, 100],
-        'lamellarity': [2, 100]
-    }
+    k = 5
+    for problem in problems:
+        stats = cnn_fold(k,
+                         path_to_json.format(problem[0]),
+                         path_to_img_without_padding.format(problem[0]),
+                         epochs=1, verbose=True)
+        for i, _ in enumerate(stats):
+            stats[i].class_names = problem[1]
+        save_stats(stats, stats_path.format('cnn_1', problem[0]))
 
 
 def validate_svm():
     k = 5
-    problems = ['packiging', 'lamellarity']
     for problem in problems:
-        stats_path = 'output/stats/kfold/svm_test/{}.csv'.format(problem)
-        stats = svm_folds(k, path_to_json.format(problem))
-        save_stats(stats, stats_path)
+        stats = svm_folds(k, path_to_json.format(problem[0]))
+        save_stats(stats, stats_path.format('svm', problem[0]))
 
 
 if __name__ == '__main__':
-    validate_svm()
+    #validate_svm()
+    validate_cnn()
