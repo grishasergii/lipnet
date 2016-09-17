@@ -8,29 +8,9 @@ import math
 from scipy import stats, signal
 
 
-# move it to separate module!
-class Batch(object):
-    def __init__(self, data, labels, ids):
-        """
-
-        :param data:
-        :param labels:
-        :param ids:
-        """
-        assert data.shape[0] == labels.shape[0], "Number of data and corresponding labels must be the same"
-        assert data.shape[0] == ids.shape[0], "Number of data and corresponding ids must be the same"
-        self.images = data
-        self.labels = labels
-        self.ids = ids
-
-    @property
-    def size(self):
-        return self.ids.shape[0]
-
-
 class DatasetBasic(object):
 
-    def __init__(self, df, batch_size=None):
+    def __init__(self, df):
         self._df = df.copy()
 
         # replace class names with integers
@@ -50,11 +30,6 @@ class DatasetBasic(object):
         ix = self._class_columns
         self._df[ix] = self._df[ix] * (1 - eps) + (1 - self._df[ix]) * eps / (len(ix) - 1)
 
-        if batch_size is not None:
-            self.batch_size = batch_size
-        else:
-            self.batch_size = self.count
-
         # make columns for predictions
         self._prediction_columns = [c + '_prediction' for c in self._class_columns]
         for col in self._prediction_columns:
@@ -63,10 +38,6 @@ class DatasetBasic(object):
     @property
     def count(self):
         return self._df.shape[0]
-
-    @property
-    def batches_count(self):
-        return int(math.ceil(self.count / self.batch_size))
 
     @property
     def num_classes(self):
@@ -85,21 +56,6 @@ class DatasetBasic(object):
     def balanced_class_weights(self):
         n_samples = len(self._df)
         return float(n_samples) / (self.num_classes * np.bincount(self._df.Class.values))
-
-    def iterate_minibatches(self, shuffle_=False):
-        ids = self._df.Id.values.copy()
-        if shuffle_:
-            np.random.shuffle(ids)
-        start_idx = 0
-        while start_idx < ids.shape[0]:
-            excerpt = ids[start_idx:start_idx + self.batch_size]
-            minibatch = self._get_batch(excerpt)
-            start_idx += self.batch_size
-            yield minibatch
-
-    @abstractmethod
-    def _get_batch(self, ids):
-        pass
 
     @property
     def x(self):
@@ -137,8 +93,8 @@ class DatasetBasic(object):
 
 class DatasetFeatures(DatasetBasic):
 
-    def __init__(self, df, batch_size=None, do_oversampling=True):
-        super(DatasetFeatures, self).__init__(df, batch_size=batch_size)
+    def __init__(self, df, do_oversampling=True):
+        super(DatasetFeatures, self).__init__(df)
 
         self.do_oversampling = do_oversampling
         self.feature_names = ['Area',
@@ -161,14 +117,9 @@ class DatasetFeatures(DatasetBasic):
             self.oversample()
 
     @classmethod
-    def from_json(cls, path_to_json, batch_size=None, do_oversampling=True):
+    def from_json(cls, path_to_json, do_oversampling=True):
         df = pd.read_json(path_to_json)
-        return cls(df, batch_size=batch_size, do_oversampling=do_oversampling)
-
-    def _get_batch(self, ids):
-        data = self._df[self.feature_names][self._df['Id'].isin(ids)].values
-        labels = self._df[self._class_columns][self._df['Id'].isin(ids)].values
-        return Batch(data, labels, np.array(ids))
+        return cls(df, do_oversampling=do_oversampling)
 
     @property
     def input_shape(self):
@@ -253,8 +204,8 @@ class DatasetFeatures(DatasetBasic):
 
 class DatasetEDP(DatasetFeatures):
 
-    def __init__(self, df, batch_size=None, do_oversampling=True):
-        super(DatasetFeatures, self).__init__(df, batch_size=batch_size)
+    def __init__(self, df, do_oversampling=True):
+        super(DatasetFeatures, self).__init__(df)
 
         self.do_oversampling = do_oversampling
         self.feature_names = []
@@ -264,8 +215,8 @@ class DatasetEDP(DatasetFeatures):
 
 class DatasetRDP(DatasetFeatures):
 
-    def __init__(self, df, batch_size=None, do_oversampling=True):
-        super(DatasetFeatures, self).__init__(df, batch_size=batch_size)
+    def __init__(self, df, do_oversampling=True):
+        super(DatasetFeatures, self).__init__(df)
 
         self.do_oversampling = do_oversampling
         self.feature_names = []
@@ -279,9 +230,8 @@ class DatasetRDP(DatasetFeatures):
 
 class DatasetVironovaSVM(DatasetFeatures):
 
-    def __init__(self, df, batch_size=None, do_oversampling=True):
+    def __init__(self, df, do_oversampling=True):
         super(DatasetVironovaSVM, self).__init__(df,
-                                                 batch_size=batch_size,
                                                  do_oversampling=do_oversampling)
 
         self.do_oversampling = do_oversampling
