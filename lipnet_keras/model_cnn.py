@@ -1,116 +1,225 @@
-from keras.models import Sequential
 from keras.layers import Dense, Activation, Dropout, Convolution2D, MaxPooling2D, Flatten
 from keras.preprocessing.image import ImageDataGenerator
 from keras.optimizers import SGD
-import numpy as np
 import lipnet_input
-from confusion_matrix import ConfusionMatrix
-from keras.utils import np_utils
-
-"""
-problem_name = 'packiging'
-nb_epoch = 10
-
-train_set = lipnet_input.get_dataset_images_keras(problem_name,
-                                                  'train',
-                                                  do_oversampling=False,
-                                                  img_size=(28, 28))
-train_set.oversample()
-
-validation_set = lipnet_input.get_dataset_images_keras(problem_name,
-                                                       'validation',
-                                                       do_oversampling=False,
-                                                       img_size=(28, 28))
-"""
+from model import ModelBasic
+from keras import backend as K
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import helpers
+from dataset.dataset_images import DatasetImages
+from keras.callbacks import EarlyStopping
 
 
-def cnn(train_set, test_set, nb_epoch=10, verbose=True):
-    x_train = train_set.x
-    x_test = test_set.x
+class ModelCNNBasic(ModelBasic):
+    def fit(self, train_set, test_set, nb_epoch):
+        super(ModelCNNBasic, self).fit(train_set, test_set, nb_epoch)
+        # data augmentation
+        datagen = ImageDataGenerator(
+            zca_whitening=False,
+            rotation_range=180,
+            width_shift_range=0.1,
+            height_shift_range=0.1,
+            horizontal_flip=True,
+            vertical_flip=True,
+        )
 
-    n_classes = train_set.num_classes
+        datagen.fit(self.x_train)
 
-    # train set targets
-    y_train = train_set.y
-    y_train = np_utils.to_categorical(y_train, n_classes)
+        verbose = 1
+        if not self.verbose:
+            verbose = 0
 
-    # label smoothing
-    eps = 0.1
-    y_train = y_train * (1 - eps) + (1 - y_train) * eps / (n_classes - 1.0)
+        callbacks = []
+        validation_data = ()
+        if test_set is not None:
+            early_stopping = EarlyStopping(monitor='val_loss', patience=20)
+            validation_data = (self.x_test,
+                               self.y_test)
+            callbacks = [early_stopping]
 
-    # validation set targets
-    y_test = test_set.y
-    y_test = np_utils.to_categorical(y_test, n_classes)
+        self.model.fit_generator(datagen.flow(self.x_train,
+                                              self.y_train,
+                                              shuffle=True),
+                                 samples_per_epoch=self.x_train.shape[0],
+                                 nb_epoch=nb_epoch,
+                                 validation_data=validation_data,
+                                 callbacks=callbacks,
+                                 verbose=verbose)
 
-    model = Sequential()
+    def visualize_weights(self, plot_dir):
+        for layer in self.model.layers:
+            if isinstance(layer, Convolution2D):
+                weights = layer.get_weights()[0]
+                self.plot_conv_weights(weights, layer.name, plot_dir)
 
-    model.add(Convolution2D(32, 3, 3,
-                            border_mode='same',
-                            input_shape=x_train.shape[1:]))
-    model.add(Activation('relu'))
+    def visualize_conv_image(self, image, plot_dir):
+        x = image.reshape((1,) + image.shape)
+        for i, layer in enumerate(self.model.layers):
+            if isinstance(layer, Convolution2D):
+                get_layer_output = K.function([self.model.layers[0].input, K.learning_phase()],
+                                              [layer.output])
+                layer_output = get_layer_output([x, 0])[0]
+                self.plot_conv_output(layer_output, layer.name, plot_dir)
 
-    model.add(Convolution2D(32, 3, 3))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+    @staticmethod
+    def plot_conv_weights(weights, name, plot_dir, channels_all=True):
+        """
+        Plots convolutional filters
+        :param weights: numpy array of rank 4
+        :param name: string, name of convolutional layer
+        :param channels_all: boolean, optionalr
+        :return: nothing, plots are saved on the disk
+        """
+        # make path to output folder
+        plot_dir = os.path.join(plot_dir, name)
 
-    model.add(Convolution2D(64, 3, 3, border_mode='same'))
-    model.add(Activation('relu'))
-    model.add(Convolution2D(64, 3, 3))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
+        # create directory if does not exist, otherwise empty it
+        helpers.prepare_dir(plot_dir, empty=True)
 
-    model.add(Flatten())
-    model.add(Dense(512))
-    model.add(Activation('relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(n_classes))
-    model.add(Activation('softmax'))
+        w_min = np.min(weights.flatten())
+        w_max = np.max(weights.flatten())
 
-    optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
-    model.compile(loss='categorical_crossentropy',
-                  optimizer=optimizer,
-                  metrics=['accuracy'])
+        channels = [1]
+        # make a list of channels if all are plotted
+        if channels_all:
+            channels = range(weights.shape[1])
 
-    # get class weights
-    class_weights_balanced = train_set.balanced_class_weights
-    class_weights = {}
-    for i, weight in enumerate(class_weights_balanced):
-        class_weights[i] = weight
+        # get number of convolutional filters
+        num_filters = weights.shape[0]
 
-    # data augmentation
-    datagen = ImageDataGenerator(
-        zca_whitening=False,
-        rotation_range=360,
-        width_shift_range=0.1,
-        height_shift_range=0.1,
-        horizontal_flip=True,
-        vertical_flip=True,
-    )
+        # get number of grid rows and columns
+        grid_r, grid_c = helpers.get_grid_dim(num_filters)
 
-    datagen.fit(x_train)
+        # create figure and axes
+        fig, axes = plt.subplots(min([grid_r, grid_c]),
+                                 max([grid_r, grid_c]))
 
-    v = 1
-    if not verbose:
-        v = 0
+        # iterate channels
+        for channel in channels:
+            # iterate filters inside every channel
+            for l, ax in enumerate(axes.flat):
+                # get a single filter
+                img = weights[l, channel, :, :]
+                # put it on the grid
+                ax.imshow(img, vmin=w_min, vmax=w_max, interpolation='nearest', cmap='seismic')
+                # remove any labels from the axes
+                ax.set_xticks([])
+                ax.set_yticks([])
+            # save figure
+            plt.savefig(os.path.join(plot_dir, '{}-{}.png'.format(name, channel)), bbox_inches='tight')
 
-    model.fit_generator(datagen.flow(x_train, y_train, shuffle=True),
-                        samples_per_epoch=x_train.shape[0],
-                        nb_epoch=nb_epoch,
-                        #validation_data=(x_test, y_test),
-                        verbose=v)
+    @staticmethod
+    def plot_conv_output(conv_img, name, plot_dir):
+        """
+        Makes plots of results of performing convolution
+        :param conv_img: numpy array of rank 4
+        :param name: string, name of convolutional layer
+        :return: nothing, plots are saved on the disk
+        """
+        # make path to output folder
+        plot_dir = os.path.join(plot_dir, name)
 
-    # y_pred = model.predict_proba(x_train, verbose=0)
-    # cf = ConfusionMatrix(y_pred, y_train)
-    # print 'Train:'
-    # print cf.as_str
+        # create directory if does not exist, otherwise empty it
+        helpers.prepare_dir(plot_dir, empty=True)
 
-    y_pred = model.predict_proba(x_test, verbose=0)
-    cf = ConfusionMatrix(y_pred, y_test)
+        w_min = np.min(conv_img)
+        w_max = np.max(conv_img)
 
-    if verbose:
-        print 'Validation:'
-        print cf.as_str
+        # get number of convolutional filters
+        num_filters = conv_img.shape[1]
 
-    return cf
+        # get number of grid rows and columns
+        grid_r, grid_c = helpers.get_grid_dim(num_filters)
+
+        # create figure and axes
+        fig, axes = plt.subplots(min([grid_r, grid_c]),
+                                 max([grid_r, grid_c]))
+
+        # iterate filters
+        for l, ax in enumerate(axes.flat):
+            # get a single image
+            img = conv_img[0, l, :, :]
+            # put it on the grid
+            ax.imshow(img, vmin=w_min, vmax=w_max, interpolation='bicubic', cmap='Greys')
+            # remove any labels from the axes
+            ax.set_xticks([])
+            ax.set_yticks([])
+        # save figure
+        plt.savefig(os.path.join(plot_dir, '{}.png'.format(name)), bbox_inches='tight')
+
+
+class ModelCNN_Deep(ModelCNNBasic):
+    def build_model(self, input_dim, output_dim):
+        self.model.add(Convolution2D(32, 3, 3,
+                                     border_mode='same',
+                                     input_shape=input_dim))
+        self.model.add(Activation('relu'))
+
+        self.model.add(Convolution2D(32, 3, 3))
+        self.model.add(Activation('relu'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Dropout(0.25))
+
+        self.model.add(Convolution2D(64, 3, 3, border_mode='same'))
+        self.model.add(Activation('relu'))
+        self.model.add(Convolution2D(64, 3, 3))
+        self.model.add(Activation('relu'))
+        self.model.add(MaxPooling2D(pool_size=(2, 2)))
+        self.model.add(Dropout(0.25))
+
+        self.model.add(Flatten())
+        self.model.add(Dense(512))
+        self.model.add(Activation('relu'))
+        self.model.add(Dropout(0.5))
+
+        self.model.add(Dense(output_dim))
+        self.model.add(Activation('softmax'))
+
+        if self._compile_on_build:
+            optimizer = SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+            self.model.compile(loss='categorical_crossentropy',
+                               optimizer=optimizer,
+                               metrics=['accuracy'])
+
+
+def train():
+    problem_name = 'lamellarity'
+
+    train_set = lipnet_input.get_dataset_images_keras(problem_name, 'train', (28, 28))
+    test_set = lipnet_input.get_dataset_images_keras(problem_name, 'test', (28, 28))
+
+    model = ModelCNN_Deep(verbose=True)
+    train_set.oversample()
+    model.fit(train_set, test_set, nb_epoch=100)
+
+    # print confusion matrix of train set
+    cf = model.evaluate(train_set)
+    print 'Train:'
+    print cf.as_str
+
+    # print confusion matrix of test set
+    cf = model.evaluate(test_set)
+    print 'Test:'
+    print cf.as_str
+
+    model.save('output/models/model_cnn_deep.h5')
+
+
+def visualize():
+    problem_name = 'lamellarity'
+
+    model = ModelCNN_Deep(verbose=True)
+    model.restore('output/models/model_cnn_deep.h5')
+
+    model.visualize_weights('output/figures/{}/cnn_deep/conv_weights/'.format(problem_name))
+    image_name = '539193.jpg'
+    image_path = os.path.join(lipnet_input.path_to_img.format(problem_name), image_name)
+    image = DatasetImages.read_image(image_path, (28, 28))
+    model.visualize_conv_image(image, 'output/figures/{}/cnn_deep/conv_output/'.format(problem_name))
+
+
+if __name__ == '__main__':
+    #train()
+    visualize()
