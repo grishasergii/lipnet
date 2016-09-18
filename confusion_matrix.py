@@ -92,13 +92,13 @@ class ConfusionMatrix:
 
         # make class names
         if class_names is None:
-            self._class_names = []
+            self.class_names = []
             for i in xrange(self._num_classes):
-                self._class_names.append('Class_%d' % i)
+                self.class_names.append('Class_%d' % i)
         else:
             assert len(class_names) == self._num_classes,\
                 'Number of class names must be equal to total number of classes'
-            self._class_names = class_names
+            self.class_names = class_names
 
         # extract number of examples
         self._num_examples = predictions.shape[0]
@@ -124,8 +124,8 @@ class ConfusionMatrix:
         self.confusion_tables = [None] * self._num_classes
         for i in xrange(self._num_classes):
             self.confusion_tables[i] = \
-                ConfusionTable(_predictions, _labels, i, name=self._class_names[i])
-            #print self.confusion_tables[self._class_names[i]]
+                ConfusionTable(_predictions, _labels, i, name=self.class_names[i])
+            #print self.confusion_tables[self.class_names[i]]
 
     @property
     def matrix_not_normalized(self):
