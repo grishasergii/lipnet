@@ -14,7 +14,7 @@ class DatasetImages(DatasetBasic):
         # read images to the dataframe
         #"""
         for idx, row in df.iterrows():
-            img = self._read_image(row.Image, img_size)
+            img = self.read_image(row.Image, img_size)
             df.set_value(idx, 'Image_data', img)
 
         # delete all rows where image_data is None
@@ -24,24 +24,7 @@ class DatasetImages(DatasetBasic):
 
         self.img_size = img_size
         self.feature_names = ['Image_data']
-
-    def oversample(self):
-        """
-        Repeat underrepresented classes to balance the dataset
-        :return: nothing
-        """
-        class_counts = self._df['Class'].value_counts()
-        max_count = max(class_counts.values)
-        for idx, count in class_counts.iteritems():
-            if count != max_count:
-                n = math.ceil(max_count / count) - 1
-                n = int(n)
-                is_minority = self._df['Class'] == idx
-                df = self._df[is_minority]
-                self._df = self._df.append([df] * n, ignore_index=True)
-        pass
-
-
+        self._df = self._df[self.feature_names + self._class_columns + ['Class']]
 
     @classmethod
     def from_json(cls, path_to_json, path_to_img, img_size=None):
@@ -70,7 +53,7 @@ class DatasetImages(DatasetBasic):
         return x_
 
     @staticmethod
-    def _read_image(image_name, img_size=None):
+    def read_image(image_name, img_size=None):
         """
         Read image from file
         :param image_name: string, image full name including path

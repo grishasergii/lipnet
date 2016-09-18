@@ -90,6 +90,22 @@ class DatasetBasic(object):
         return cf.ConfusionMatrix(self._df[self._prediction_columns].values,
                                   self._df[self._class_columns].values)
 
+    def oversample(self):
+        """
+        Repeat underrepresented classes to balance the dataset
+        :return: nothing
+        """
+        class_counts = self._df['Class'].value_counts()
+        max_count = max(class_counts.values)
+        for idx, count in class_counts.iteritems():
+            if count != max_count:
+                n = math.ceil(max_count / count) - 1
+                n = int(n)
+                is_minority = self._df['Class'] == idx
+                df = self._df[is_minority]
+                self._df = self._df.append([df] * n, ignore_index=True)
+        pass
+
 
 class DatasetFeatures(DatasetBasic):
 
@@ -125,6 +141,11 @@ class DatasetFeatures(DatasetBasic):
     def input_shape(self):
         return [len(self.feature_names)]
 
+    @property
+    def x(self):
+        return self._df[self.feature_names].values.copy()
+
+    """
     def oversample(self):
         # determine majority and minority classes
         class_counts = self._df['Class'].value_counts()
@@ -144,6 +165,7 @@ class DatasetFeatures(DatasetBasic):
             df = pd.DataFrame(synthetic_data, columns=['Id'] + self.feature_names + self._class_columns)
             self._df = self._df.append(df, ignore_index=True)
             new_id += n
+    """
 
     def _resample_rdp(self, n):
         """
@@ -245,7 +267,7 @@ class DatasetVironovaSVM(DatasetFeatures):
 
         self._resample_edp(self._n_sample)
         #self._transform_histogram()
-
+        self._df = self._df[self.feature_names + self._class_columns + ['Class']]
         pass
 
     @property
