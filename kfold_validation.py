@@ -8,10 +8,11 @@ import svm
 from dataset.dataset import DatasetVironovaSVM
 from dataset.dataset_images import DatasetImages
 import numpy as np
-from lipnet_keras.model_cnn import cnn
+from lipnet_keras.model_cnn import ModelLipnet4, ModelLipnet6
 
 
 path_to_json = '/home/sergii/Documents/microscopic_data/{}/particles_repaired.json'
+path_to_img_with_padding = '/home/sergii/Documents/microscopic_data/{}/images/particles/'
 path_to_img_without_padding = '/home/sergii/Documents/microscopic_data/{}/images/without_padding/'
 stats_path = 'output/stats/kfold/{}/{}.csv'
 problems = [
@@ -20,18 +21,20 @@ problems = [
 ]
 
 
-def cnn_fold(k, path_to_json, path_to_img, epochs=10, verbose=False):
+def cnn_fold(k, path_to_json, path_to_img, epochs=10, img_size=(28, 28), verbose=False):
     kfold = KFold(k, path_to_json, path_to_img)
     stats = [None] * 5
     for i in xrange(k):
         print '{}: Fold {} of {}'.format(datetime.now(), i + 1, k)
         train_df, test_df = kfold.get_datasets(i)
-        train_set = DatasetImages(train_df, (28, 28))
+        train_set = DatasetImages(train_df, img_size)
         train_set.oversample()
-        test_set = DatasetImages(test_df, (28, 28))
-        stats[i] = cnn(train_set, test_set,
-                       nb_epoch=epochs,
-                       verbose=verbose)
+        test_set = DatasetImages(test_df, img_size)
+        model = ModelLipnet4(verbose=True)
+        model.fit(train_set=train_set,
+                  test_set=None,
+                  nb_epoch=epochs)
+        stats[i] = model.evaluate(test_set)
     return stats
 
 
@@ -65,9 +68,10 @@ def save_stats(cf_matrices, out_path):
         averages = np.zeros(3 * 8)
         # write a row
         for i, cfm in enumerate(cf_matrices):
-            row = [i + 1]
+            writer.writerow([i+1])
             measures_avg = []
             for ct in cfm.confusion_tables:
+                row = []
                 measures = [ct.true_positive,
                             ct.false_negative,
                             ct.false_positive,
@@ -81,30 +85,40 @@ def save_stats(cf_matrices, out_path):
                 for m in measures:
                     row += ['{:.4f}'.format(m)]
                 measures_avg += measures
+                writer.writerow(row)
 
-            row += [cfm.as_str]
-            writer.writerow(row)
+            writer.writerow([cfm.as_str])
 
             averages = np.add(averages, measures_avg)
 
         k = len(cf_matrices)
         averages = np.multiply(averages, 1.0 / k)
         row = ['average']
+        writer.writerow(row)
+        row = []
         for x in averages:
             row += ['{:.4f}'.format(x)]
         writer.writerow(row)
 
 
-def validate_cnn():
+def validate_cnn(model_name, path_img, img_size):
     k = 5
-    for problem in problems:
-        stats = cnn_fold(k,
-                         path_to_json.format(problem[0]),
-                         path_to_img_without_padding.format(problem[0]),
-                         epochs=1, verbose=True)
-        for i, _ in enumerate(stats):
-            stats[i].class_names = problem[1]
-        save_stats(stats, stats_path.format('cnn_1', problem[0]))
+    verbose = False
+    epochs = [70]
+
+    for n_epochs in epochs:
+        print '{}: epochs: {}'.format(datetime.now(), n_epochs)
+        for problem in problems:
+            print '{}: problem: {}'.format(datetime.now(), problem[0])
+            stats = cnn_fold(k,
+                             path_to_json.format(problem[0]),
+                             path_img.format(problem[0]),
+                             epochs=n_epochs,
+                             verbose=verbose,
+                             img_size=img_size)
+            for i, _ in enumerate(stats):
+                stats[i].class_names = problem[1]
+            save_stats(stats, stats_path.format(model_name, problem[0]))
 
 
 def validate_svm():
@@ -116,4 +130,6 @@ def validate_svm():
 
 if __name__ == '__main__':
     #validate_svm()
-    validate_cnn()
+    validate_cnn(model_name='lipnet4_with_surrounding',
+                 path_img=path_to_img_without_padding,
+                 img_size=(56, 56))
