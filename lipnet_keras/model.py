@@ -10,10 +10,11 @@ from sklearn.preprocessing import StandardScaler
 import helpers
 from keras.models import load_model
 import os
+import h5py
 
 
 class ModelBasic(object):
-    def __init__(self, verbose, compile_on_build=True):
+    def __init__(self, verbose, compile_on_build=True, include_top=True, name=''):
         self.model = Sequential()
         self.verbose = verbose
         self.x_train = None
@@ -22,6 +23,8 @@ class ModelBasic(object):
         self.y_test = None
         self._scaler = StandardScaler()
         self._compile_on_build = compile_on_build
+        self._include_top = include_top
+        self.name = name
 
     def fit(self, train_set, test_set, nb_epoch):
         # features
@@ -87,4 +90,18 @@ class ModelBasic(object):
         self.model.save(path)
 
     def restore(self, path):
-        self.model = load_model(path)
+        self.model.load_weights(path)
+        """
+        f = h5py.File(path)
+        for k in range(50):
+            if k >= len(self.model.layers):
+                # we don't look at the last (fully-connected) layers in the savefile
+                break
+            g = f['layer_{}'.format(k)]
+            weights = [g['param_{}'.format(p)] for p in range(g.attrs['nb_params'])]
+            self.model.layers[k].set_weights(weights)
+        f.close()
+        if self.verbose:
+            print('Model loaded.')
+        """
+        # self.model = load_model(path)
