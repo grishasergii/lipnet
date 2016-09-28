@@ -13,10 +13,21 @@ class DatasetBasic(object):
     def __init__(self, df):
         self._df = df.copy()
 
+        try:
+            self._df['Class'] = self._df['Class'].replace(to_replace=[3, 4, 5, 7, 8, 10],
+                                                          value=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty',
+                                                                 'Full',
+                                                                 'Uncertain'])
+        except:
+            pass
+
         # replace class names with integers
-        self._df['Class'] = self._df['Class'].replace(to_replace=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty',
-                                                                 'Full'],
-                                                      value=[0, 1, 2, 0, 1])
+        try:
+            self._df['Class'] = self._df['Class'].replace(to_replace=['Unilamellar', 'Multilamellar', 'Uncertain', 'Empty',
+                                                                     'Full'],
+                                                          value=[0, 1, 2, 0, 1])
+        except:
+            pass
 
         # prepare class columns
         self._class_columns = [col for col in list(self._df) if col.startswith('Label')]
@@ -29,6 +40,8 @@ class DatasetBasic(object):
         eps = 0.1
         ix = self._class_columns
         self._df[ix] = self._df[ix] * (1 - eps) + (1 - self._df[ix]) * eps / (len(ix) - 1)
+
+        self.labels = df.Class.unique()
 
         # make columns for predictions
         self._prediction_columns = [c + '_prediction' for c in self._class_columns]

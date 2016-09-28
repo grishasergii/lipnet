@@ -74,3 +74,59 @@ class DatasetImages(DatasetBasic):
             img = img.reshape((1, img_size[0], img_size[1]))
 
         return img
+
+    def get_image_size_stats(self):
+        img_dims = np.zeros((len(self._df), 2))
+        for i, row in self._df.iterrows():
+            img_dims[i, 0] = row['Image_data'].shape[0]
+            img_dims[i, 1] = row['Image_data'].shape[1]
+        df = pd.DataFrame(data=img_dims, columns=['Height', 'Width'])
+        df['Class'] = self._df['Class'].copy()
+        return df
+
+
+class DatasetImagesPadded(DatasetImages):
+
+    @staticmethod
+    def read_image(image_name, img_size=None):
+        """
+        Read image from file
+        :param image_name: string, image full name including path
+        :param img_size: tuple of two ints, optional, specify if you want to resize image
+        :return: numpy 2d array
+        """
+        filename = image_name
+        try:
+            img = io.imread(filename)
+        except IOError:
+            return None
+        img = img_as_float(img)
+        if len(img.shape) > 2:
+            img = img[:, :, 0]
+
+        if img_size is not None:
+            if img.shape[0] > img_size[0] or \
+               img.shape[1] > img_size[1]:
+                h = min(img.shape[0], img_size[0])
+                w = min(img.shape[1], img_size[1])
+                img = resize(img, (h, w))
+
+            x_before = x_after = 0
+            if img.shape[0] < img_size[0]:
+                x_before = math.ceil((img_size[0] - img.shape[0]) / 2)
+                x_before = int(x_before)
+                x_after = math.floor((img_size[0] - img.shape[0]) / 2)
+                x_after = int(x_after)
+
+            y_before = y_after = 0
+            if img.shape[1] < img_size[1]:
+                y_before = math.ceil((img_size[1] - img.shape[1]) / 2)
+                y_before = int(y_before)
+                y_after = math.floor((img_size[1] - img.shape[1]) / 2)
+                y_after = int(y_after)
+
+            img = np.pad(img, ((x_before, x_after), (y_before, y_after)), 'constant')
+            assert img.shape == img_size
+        img = img.reshape((1, img.shape[0], img.shape[1]))
+
+        return img
