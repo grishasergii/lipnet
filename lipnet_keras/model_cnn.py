@@ -1,4 +1,4 @@
-from keras.layers import Dense, Activation, Dropout, Convolution2D, MaxPooling2D, Flatten
+from keras.layers import Dense, Activation, Dropout, Convolution2D, MaxPooling2D, Flatten, BatchNormalization
 from keras.preprocessing.image import ImageDataGenerator
 from keras.optimizers import SGD
 import lipnet_input
@@ -146,6 +146,8 @@ class ModelCNNBasic(ModelBasic):
             height_shift_range=0.1,
             horizontal_flip=True,
             vertical_flip=True,
+            shear_range=0.2,
+            zoom_range=0.2
         )
 
         datagen.fit(self.x_train)
@@ -283,30 +285,38 @@ class ModelCNNBasic(ModelBasic):
 
 class ModelLipnet4(ModelCNNBasic):
     def build_model(self, input_dim, output_dim):
+        trainable = True
         self.model.add(Convolution2D(32, 3, 3,
                                      border_mode='same',
-                                     input_shape=input_dim))
-        self.model.add(Activation('relu'))
+                                     input_shape=input_dim,
+                                     trainable=trainable))
+        self.model.add(BatchNormalization())
+        self.model.add(Activation('relu', trainable=trainable))
 
-        self.model.add(Convolution2D(32, 3, 3))
-        self.model.add(Activation('relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
+        self.model.add(Convolution2D(32, 3, 3, trainable=trainable))
+        self.model.add(BatchNormalization())
+        self.model.add(Activation('relu', trainable=trainable))
+        self.model.add(MaxPooling2D(pool_size=(2, 2), trainable=trainable))
+        self.model.add(Dropout(0.25, trainable=trainable))
 
-        self.model.add(Convolution2D(64, 3, 3, border_mode='same'))
-        self.model.add(Activation('relu'))
-        self.model.add(Convolution2D(64, 3, 3))
-        self.model.add(Activation('relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
+        self.model.add(Convolution2D(64, 3, 3, border_mode='same', trainable=trainable))
+        self.model.add(BatchNormalization())
+        self.model.add(Activation('relu', trainable=trainable))
+        self.model.add(Convolution2D(64, 3, 3, trainable=True))
+        self.model.add(BatchNormalization())
+        self.model.add(Activation('relu', trainable=True))
+        self.model.add(MaxPooling2D(pool_size=(2, 2), trainable=True))
+        self.model.add(Dropout(0.25, trainable=True))
 
         if self._include_top:
             self.model.add(Flatten())
             self.model.add(Dense(512))
+            self.model.add(BatchNormalization())
             self.model.add(Activation('relu'))
             self.model.add(Dropout(0.5))
 
             self.model.add(Dense(output_dim))
+            self.model.add(BatchNormalization())
             self.model.add(Activation('softmax'))
 
             if self._compile_on_build:
@@ -319,24 +329,24 @@ class ModelLipnet4(ModelCNNBasic):
 class ModelLipnet6(ModelCNNBasic):
     def build_model(self, input_dim, output_dim):
         h = 5
-
+        trainable = False
         # 1st conv block
-        self.model.add(Convolution2D(32, h, h, input_shape=input_dim, border_mode='same', activation='relu'))
-        self.model.add(Convolution2D(32, h, h, activation='relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
+        self.model.add(Convolution2D(32, 7, 7, input_shape=input_dim, border_mode='same', activation='relu', trainable=trainable))
+        self.model.add(Convolution2D(32, 7, 7, activation='relu', trainable=trainable))
+        self.model.add(MaxPooling2D(pool_size=(2, 2), trainable=trainable))
+        self.model.add(Dropout(0.25, trainable=trainable))
 
         # 2nd conv block
-        self.model.add(Convolution2D(64, h, h, activation='relu', border_mode='same'))
-        self.model.add(Convolution2D(64, h, h, activation='relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
+        self.model.add(Convolution2D(64, 5, 5, activation='relu', border_mode='same', trainable=trainable))
+        self.model.add(Convolution2D(64, 5, 5, activation='relu', trainable=trainable))
+        self.model.add(MaxPooling2D(pool_size=(2, 2), trainable=trainable))
+        self.model.add(Dropout(0.25, trainable=trainable))
 
         # 3rd conv block
-        self.model.add(Convolution2D(128, h, h, activation='relu', border_mode='same'))
-        self.model.add(Convolution2D(128, h, h, activation='relu'))
-        self.model.add(MaxPooling2D(pool_size=(2, 2)))
-        self.model.add(Dropout(0.25))
+        self.model.add(Convolution2D(128, 3, 3, activation='relu', border_mode='same', trainable=trainable))
+        self.model.add(Convolution2D(128, 3, 3, activation='relu', trainable=trainable))
+        self.model.add(MaxPooling2D(pool_size=(2, 2), trainable=trainable))
+        self.model.add(Dropout(0.25, trainable=trainable))
 
         if self._include_top:
             self.model.add(Flatten())
@@ -359,15 +369,15 @@ class ModelLipnet6(ModelCNNBasic):
                                    metrics=['accuracy'])
 
 
-def train(model):
+def train(model, img_size, with_padding, nb_epoch):
     problem_name = 'packiging'
-    img_size = (52, 52)
-    train_set = lipnet_input.get_dataset_images_keras(problem_name, 'train', img_size, with_padding=True)
-    test_set = lipnet_input.get_dataset_images_keras(problem_name, 'test', img_size, with_padding=True)
+
+    train_set = lipnet_input.get_dataset_images_keras(problem_name, 'train', img_size, with_padding=with_padding)
+    test_set = lipnet_input.get_dataset_images_keras(problem_name, 'test', img_size, with_padding=with_padding)
 
     # model = ModelLipnet4(verbose=True, name='lipnet6_{}'.format(problem_name))
     train_set.oversample()
-    model.fit(train_set, test_set, nb_epoch=100)
+    model.fit(train_set, test_set, nb_epoch=nb_epoch)
 
     # print confusion matrix of train set
     cf = model.evaluate(train_set)
@@ -413,7 +423,8 @@ def visualize_features(model, problem_name):
 if __name__ == '__main__':
     problem_name = 'packiging'
 
-    model = ModelLipnet4(verbose=True, name='lipnet4_{}'.format(problem_name))
-    #train(model)
+    model = ModelLipnet4(verbose=True, name='lipnet6_{}'.format(problem_name))
+    img_size = (28, 28)
+    train(model, img_size=img_size, with_padding=True, nb_epoch=100)
     #visualize()
-    visualize_features(None, 'packiging')
+    #visualize_features(None, 'packiging')
