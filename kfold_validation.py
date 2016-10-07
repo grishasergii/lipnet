@@ -16,8 +16,8 @@ path_to_img_with_padding = '/home/sergii/Documents/microscopic_data/{}/images/pa
 path_to_img_without_padding = '/home/sergii/Documents/microscopic_data/{}/images/without_padding/'
 stats_path = 'output/stats/kfold/{}/{}.csv'
 problems = [
-    ('packiging', ['Empty', 'Full', 'Uncertain']),
-    ('lamellarity', ['Unilamellar', 'Multilamellar', 'Uncertain'])
+    ('packiging', ['Empty', 'Full', 'Uncertain'])#,
+    #('lamellarity', ['Unilamellar', 'Multilamellar', 'Uncertain'])
 ]
 
 
@@ -130,6 +130,6 @@ def validate_svm():
 
 if __name__ == '__main__':
     #validate_svm()
-    validate_cnn(model_name='lipnet4_with_surrounding',
+    validate_cnn(model_name='lipnet4_without_surrounding_all_transformations',
                  path_img=path_to_img_without_padding,
-                 img_size=(56, 56))
+                 img_size=(28, 28))
