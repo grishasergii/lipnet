@@ -11,6 +11,7 @@ import helpers
 from dataset.dataset_images import DatasetImages
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from scipy.misc import imsave
+import os
 
 
 class VisualizerBasic:
@@ -390,7 +391,8 @@ def train(model, img_size, with_padding, nb_epoch):
     print cf.as_str
 
     model_name = 'lipnet6'
-    model.save('output/models/{}_model_{}.h5'.format(problem_name, model_name))
+    out_path = os.path.join('output', 'models', '{}_model_{}.h5')
+    model.save(out_path.format(problem_name, model_name))
 
 
 def visualize(model):

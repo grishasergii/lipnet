@@ -10,10 +10,11 @@ from dataset import dataset
 from dataset import dataset_images
 
 
-dir = '/home/sergii/Documents/microscopic_data/{}/'
-path_to_json = dir + '{}_{}_set.json'
-path_to_img = dir + 'images/without_padding/'
-path_to_img_padded =  dir + 'images/particles/'
+home = os.path.expanduser('~')
+path_to_data = os.path.join(home, 'Documents', 'microscopic_data', '{}')
+path_to_json = os.path.join(path_to_data, '{}_{}_set.json')
+path_to_img = os.path.join(path_to_data, 'images', 'without_padding')
+path_to_img_padded = os.path.join(path_to_data, 'images', 'particles')
 
 
 def get_dataset_images(problem_name, set_name, batch_size=500, smote_rates=None):
