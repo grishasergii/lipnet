@@ -13,6 +13,7 @@ from dataset import dataset_images
 dir = '/home/sergii/Documents/microscopic_data/{}/'
 path_to_json = dir + '{}_{}_set.json'
 path_to_img = dir + 'images/without_padding/'
+path_to_img_padded =  dir + 'images/particles/'
 
 
 def get_dataset_images(problem_name, set_name, batch_size=500, smote_rates=None):
@@ -41,34 +42,39 @@ def get_dataset_features(problem_name, set_name, do_oversampling, batch_size=500
     :return: Dataset object
     """
     return dataset.DatasetFeatures.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                             batch_size=batch_size,
                                              do_oversampling=do_oversampling)
 
 
 def get_dataset_edp(problem_name, set_name, do_oversampling, batch_size=500):
     return dataset.DatasetEDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                        batch_size=batch_size,
                                         do_oversampling=do_oversampling)
 
 
 def get_dataset_rdp(problem_name, set_name, do_oversampling, batch_size=500):
     return dataset.DatasetRDP.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                        batch_size=batch_size,
                                         do_oversampling=do_oversampling)
 
 
 def get_dataset_vironova_svm(problem_name, set_name, do_oversampling, batch_size=500):
     return dataset.DatasetVironovaSVM.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                                batch_size=batch_size,
                                                 do_oversampling=do_oversampling)
 
 
-def get_dataset_images_keras(problem_name, set_name, do_oversampling, img_size):
+def get_dataset_images_keras(problem_name, set_name, img_size, with_padding=False):
+    if with_padding:
+        img_path = path_to_img_padded
+    else:
+        img_path = path_to_img
+    img_path = img_path.format(problem_name, problem_name, set_name)
     return dataset_images.DatasetImages.from_json(path_to_json.format(problem_name, problem_name, set_name),
-                                                  path_to_img.format(problem_name, problem_name, set_name),
-                                                  #do_oversampling=do_oversampling,
+                                                  img_path,
                                                   img_size=img_size)
 
+
+def get_dataset_images_padded_keras(problem_name, set_name, img_size):
+    return dataset_images.DatasetImagesPadded.from_json(path_to_json.format(problem_name, problem_name, set_name),
+                                                  path_to_img.format(problem_name, problem_name, set_name),
+                                                  img_size=img_size)
 
 def repair_json(in_file, out_file, path_to_img):
     """
